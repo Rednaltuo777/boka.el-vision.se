@@ -1,12 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <circle cx="50" cy="50" r="44" stroke="white" stroke-width="3.5" fill="none"/>
-  <!-- E block -->
-  <path d="M28 18h44v64H28V18z" fill="white"/>
-  <!-- Three horizontal dark lines -->
-  <rect x="28" y="33" width="44" height="7" fill="#3a3a3a"/>
-  <rect x="28" y="47" width="44" height="7" fill="#3a3a3a"/>
-  <rect x="28" y="61" width="44" height="7" fill="#3a3a3a"/>
-  <!-- Cut right side to form E shape -->
-  <rect x="50" y="25" width="22" height="8" fill="#3a3a3a"/>
-  <rect x="50" y="54" width="22" height="7" fill="#3a3a3a"/>
+  <circle cx="50" cy="50" r="44" stroke="white" stroke-width="3" fill="none"/>
+  <!-- E letter -->
+  <rect x="28" y="18" width="9" height="64" fill="white"/>
+  <rect x="28" y="18" width="38" height="9" fill="white"/>
+  <rect x="28" y="36" width="32" height="9" fill="white"/>
+  <rect x="28" y="54" width="32" height="9" fill="white"/>
+  <rect x="28" y="73" width="38" height="9" fill="white"/>
 </svg>
