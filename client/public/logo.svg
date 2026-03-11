@@ -1,12 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" fill="none">
-  <!-- E icon in circle -->
-  <circle cx="345" cy="60" r="48" stroke="white" stroke-width="5" fill="none"/>
-  <rect x="320" y="32" width="50" height="56" rx="2" fill="white"/>
-  <rect x="325" y="47" width="40" height="6" fill="#3a3a3a"/>
-  <rect x="325" y="60" width="40" height="6" fill="#3a3a3a"/>
-  <rect x="325" y="73" width="40" height="6" fill="#3a3a3a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" fill="none">
+  <!-- Circle -->
+  <circle cx="420" cy="60" r="50" stroke="white" stroke-width="3.5" fill="none"/>
+  <!-- E letter - block E with horizontal cutouts -->
+  <path d="M394 20h52v80h-52V20z" fill="white"/>
+  <!-- Three horizontal dark lines cutting through the E -->
+  <rect x="394" y="38" width="52" height="7" fill="#3a3a3a"/>
+  <rect x="394" y="55" width="52" height="7" fill="#3a3a3a"/>
+  <rect x="394" y="72" width="52" height="7" fill="#3a3a3a"/>
+  <!-- Cut right side to form E shape -->
+  <rect x="420" y="27" width="26" height="11" fill="#3a3a3a"/>
+  <rect x="420" y="62" width="26" height="10" fill="#3a3a3a"/>
   <!-- EL-VISION text -->
-  <text x="0" y="68" font-family="'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="700" letter-spacing="6" fill="white">EL-VISION</text>
+  <text x="0" y="70" font-family="'Rajdhani', 'Segoe UI', system-ui, sans-serif" font-size="56" font-weight="600" letter-spacing="8" fill="white">EL-VISION</text>
   <!-- Subtitle -->
-  <text x="2" y="95" font-family="'Segoe UI', system-ui, sans-serif" font-size="14" font-weight="400" letter-spacing="4" fill="rgba(255,255,255,0.7)">KONSULTATION OCH UTBILDNING</text>
+  <text x="4" y="98" font-family="'Rajdhani', 'Segoe UI', system-ui, sans-serif" font-size="15" font-weight="400" letter-spacing="5" fill="rgba(255,255,255,0.6)">KONSULTATION OCH UTBILDNING</text>
 </svg>
