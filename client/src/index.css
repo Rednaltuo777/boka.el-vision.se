@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-secondary text-brand-700 font-sans antialiased;
+  }
+
+  /* Modern scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-700 text-white font-medium rounded-xl
+           hover:bg-brand-600 active:bg-brand-800 transition-all duration-150 shadow-soft hover:shadow-card
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white text-brand-700 font-medium rounded-xl
+           border border-surface-border hover:bg-surface-secondary active:bg-surface-tertiary
+           transition-all duration-150 shadow-soft
+           focus:outline-none focus:ring-2 focus:ring-brand-400 focus:ring-offset-2;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-accent-600 text-white font-medium rounded-xl
+           hover:bg-accent-700 active:bg-accent-600 transition-all duration-150 shadow-soft hover:shadow-card
+           focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-card border border-surface-border/50 overflow-hidden;
+  }
+
+  .input {
+    @apply w-full px-4 py-2.5 bg-white border border-surface-border rounded-xl text-brand-700
+           placeholder:text-brand-300 transition-all duration-150
+           focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-brand-500 mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-medium;
+  }
+
+  .badge-success { @apply bg-accent-100 text-accent-700; }
+  .badge-warning { @apply bg-amber-100 text-amber-700; }
+  .badge-info { @apply bg-blue-50 text-blue-700; }
+  .badge-admin { @apply bg-brand-100 text-brand-700; }
+}
+
+/* FullCalendar overrides */
+.fc {
+  --fc-border-color: #e9ecef;
+  --fc-button-bg-color: #1f1f1f;
+  --fc-button-border-color: #1f1f1f;
+  --fc-button-hover-bg-color: #3a3a3a;
+  --fc-button-hover-border-color: #3a3a3a;
+  --fc-button-active-bg-color: #0f0f0f;
+  --fc-button-active-border-color: #0f0f0f;
+  --fc-today-bg-color: rgba(34, 197, 94, 0.06);
+  --fc-event-bg-color: #1f1f1f;
+  --fc-event-border-color: #1f1f1f;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+.fc .fc-button {
+  border-radius: 0.75rem !important;
+  font-weight: 500 !important;
+  font-size: 0.8125rem !important;
+  padding: 0.4rem 1rem !important;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+}
+
+.fc .fc-daygrid-event {
+  border-radius: 0.5rem !important;
+  padding: 2px 6px !important;
+  font-size: 0.75rem !important;
+}
+
+.fc .fc-col-header-cell-cushion {
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
