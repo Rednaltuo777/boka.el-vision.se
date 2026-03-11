@@ -1,6 +1,5 @@
 {
-  "buildCommand": "cd client && npm run build",
-  "installCommand": "cd server && npm install && npx prisma generate && cd ../client && npm install",
+  "buildCommand": "npx prisma generate --schema=server/prisma/schema.prisma && cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "framework": null,
   "rewrites": [
@@ -8,7 +7,6 @@
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": "server/src/**,server/prisma/**",
       "maxDuration": 10
     }
   }
