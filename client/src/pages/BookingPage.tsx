@@ -55,7 +55,7 @@ export default function BookingPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
-  const canManageBooking = isAdmin || booking?.clientId === user?.id;
+  const canEditBooking = isAdmin || booking?.clientId === user?.id;
 
   useEffect(() => {
     if (!id) return;
@@ -71,12 +71,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!id) return;
-    if (!canManageBooking) {
-      setMessages([]);
-      return;
-    }
     api.get<ChatMessage[]>(`/chat/${id}`).then(setMessages).catch(() => setMessages([]));
-  }, [id, canManageBooking]);
+  }, [id]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -349,7 +345,7 @@ export default function BookingPage() {
                 rows={3}
                 placeholder="Skriv anteckningar här..."
                 className="input resize-none"
-                readOnly={!canManageBooking}
+                readOnly={!canEditBooking}
               />
             </div>
 
@@ -372,7 +368,7 @@ export default function BookingPage() {
               </div>
             )}
 
-            {canManageBooking ? (
+            {canEditBooking ? (
               <div className="flex items-center gap-3 mt-4">
                 <button onClick={saveNotes} disabled={saving} className="btn-primary disabled:opacity-50">
                   {saving ? "Sparar..." : "Spara anteckningar"}
@@ -387,7 +383,7 @@ export default function BookingPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-brand-300 mt-4">Du kan se bokningen, men bara bokningens ägare eller admin kan ändra anteckningar och chatt.</p>
+              <p className="text-sm text-brand-300 mt-4">Du kan se bokningen och använda chatten, men bara bokningens ägare eller admin kan ändra anteckningar.</p>
             )}
           </div>
         </div>
@@ -405,14 +401,7 @@ export default function BookingPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {!canManageBooking ? (
-                <div className="flex flex-col items-center justify-center h-full text-brand-300 text-center">
-                  <svg className="w-10 h-10 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5M4.5 14.25v-2.625A3.375 3.375 0 0 1 7.875 8.25h1.5m0 0V5.625A3.375 3.375 0 0 1 12.75 2.25h.75a3.375 3.375 0 0 1 3.375 3.375V8.25m-7.5 0h7.5m-7.5 0a3.375 3.375 0 0 0-3.375 3.375v2.625m10.875 0v2.625A3.375 3.375 0 0 1 13.5 20.25h-3a3.375 3.375 0 0 1-3.375-3.375V14.25" />
-                  </svg>
-                  <p className="text-xs">Chatt är bara tillgänglig för bokningens ägare och admin.</p>
-                </div>
-              ) : messages.length === 0 ? (
+              {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-brand-300">
                   <svg className="w-10 h-10 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -420,7 +409,7 @@ export default function BookingPage() {
                   <p className="text-xs">Inga meddelanden ännu</p>
                 </div>
               ) : null}
-              {canManageBooking && messages.map((m) => {
+              {messages.map((m) => {
                 const isOwn = m.author.id === user?.id;
                 return (
                   <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
@@ -443,22 +432,20 @@ export default function BookingPage() {
               <div ref={chatEndRef} />
             </div>
 
-            {canManageBooking && (
-              <form onSubmit={sendMessage} className="p-3 border-t border-surface-border flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Skriv meddelande..."
-                  className="input text-sm py-2"
-                />
-                <button type="submit" className="btn-primary px-3 py-2 shrink-0">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                  </svg>
-                </button>
-              </form>
-            )}
+            <form onSubmit={sendMessage} className="p-3 border-t border-surface-border flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Skriv meddelande..."
+                className="input text-sm py-2"
+              />
+              <button type="submit" className="btn-primary px-3 py-2 shrink-0">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                </svg>
+              </button>
+            </form>
           </div>
         </div>
       </div>

@@ -5,6 +5,26 @@ import * as outlook from "../lib/outlook";
 
 const router = Router();
 
+function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; authorId: string }>; chatReads: Array<{ lastReadAt: Date }>; privateNotes?: string | null }>(
+  booking: T,
+  userId: string,
+  isAdmin: boolean,
+) {
+  const latestMessage = booking.chatMessages[0];
+  const latestRead = booking.chatReads[0];
+  const hasUnread = Boolean(
+    latestMessage
+    && latestMessage.authorId !== userId
+    && (!latestRead || latestMessage.createdAt > latestRead.lastReadAt),
+  );
+
+  return {
+    ...booking,
+    privateNotes: isAdmin ? booking.privateNotes : undefined,
+    hasUnread,
+  };
+}
+
 /**
  * Calculate approximate distance in km between two Swedish cities
  * using a simple lookup + Haversine formula.
@@ -143,15 +163,21 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
     include: {
       course: true,
       client: { select: { id: true, name: true, company: true, email: true } },
+      chatMessages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { createdAt: true, authorId: true },
+      },
+      chatReads: {
+        where: { userId: req.userId },
+        take: 1,
+        select: { lastReadAt: true },
+      },
     },
     orderBy: { date: "asc" },
   });
 
-  // Strip private notes for non-admin users
-  const result = bookings.map((b) => ({
-    ...b,
-    privateNotes: req.userRole === "admin" ? b.privateNotes : undefined,
-  }));
+  const result = bookings.map((booking) => withUnreadStatus(booking, req.userId!, req.userRole === "admin"));
 
   res.json(result);
 });
@@ -164,6 +190,16 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     include: {
       course: true,
       client: { select: { id: true, name: true, company: true, email: true } },
+      chatMessages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { createdAt: true, authorId: true },
+      },
+      chatReads: {
+        where: { userId: req.userId },
+        take: 1,
+        select: { lastReadAt: true },
+      },
     },
   });
 
@@ -172,10 +208,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  res.json({
-    ...booking,
-    privateNotes: req.userRole === "admin" ? booking.privateNotes : undefined,
-  });
+  res.json(withUnreadStatus(booking, req.userId!, req.userRole === "admin"));
 });
 
 // Update booking

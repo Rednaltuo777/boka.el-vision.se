@@ -28,6 +28,7 @@ export interface Booking {
   client: Pick<User, "id" | "name" | "company" | "email">;
   createdAt: string;
   updatedAt: string;
+  hasUnread?: boolean;
 }
 
 export interface ChatMessage {

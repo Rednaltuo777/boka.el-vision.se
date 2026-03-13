@@ -24,6 +24,7 @@ model User {
   invitations  Invitation[]
   bookings     Booking[]     @relation("BookingClient")
   chatMessages ChatMessage[]
+  chatReads    BookingChatRead[]
 }
 
 model Invitation {
@@ -63,7 +64,23 @@ model Booking {
   courseId String
 
   chatMessages   ChatMessage[]
+  chatReads      BookingChatRead[]
   outlookEventId String?
+}
+
+model BookingChatRead {
+  id         String   @id @default(uuid())
+  lastReadAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  @@unique([bookingId, userId])
 }
 
 model ChatMessage {

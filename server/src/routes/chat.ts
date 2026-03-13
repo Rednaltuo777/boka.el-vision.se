@@ -13,16 +13,29 @@ router.get("/:bookingId", authenticate, async (req: AuthRequest, res: Response) 
     return;
   }
 
-  if (req.userRole !== "admin" && booking.clientId !== req.userId) {
-    res.status(403).json({ error: "Åtkomst nekad" });
-    return;
-  }
-
   const messages = await prisma.chatMessage.findMany({
     where: { bookingId },
     include: { author: { select: { id: true, name: true, role: true } } },
     orderBy: { createdAt: "asc" },
   });
+
+  const latestMessage = messages[messages.length - 1];
+  if (latestMessage && req.userId) {
+    await prisma.bookingChatRead.upsert({
+      where: {
+        bookingId_userId: {
+          bookingId,
+          userId: req.userId,
+        },
+      },
+      update: { lastReadAt: latestMessage.createdAt },
+      create: {
+        bookingId,
+        userId: req.userId,
+        lastReadAt: latestMessage.createdAt,
+      },
+    });
+  }
 
   res.json(messages);
 });
@@ -33,11 +46,6 @@ router.post("/:bookingId", authenticate, async (req: AuthRequest, res: Response)
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking) {
     res.status(404).json({ error: "Bokning ej hittad" });
-    return;
-  }
-
-  if (req.userRole !== "admin" && booking.clientId !== req.userId) {
-    res.status(403).json({ error: "Åtkomst nekad" });
     return;
   }
 
@@ -54,6 +62,21 @@ router.post("/:bookingId", authenticate, async (req: AuthRequest, res: Response)
       authorId: req.userId!,
     },
     include: { author: { select: { id: true, name: true, role: true } } },
+  });
+
+  await prisma.bookingChatRead.upsert({
+    where: {
+      bookingId_userId: {
+        bookingId,
+        userId: req.userId!,
+      },
+    },
+    update: { lastReadAt: message.createdAt },
+    create: {
+      bookingId,
+      userId: req.userId!,
+      lastReadAt: message.createdAt,
+    },
   });
 
   res.json(message);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import FullCalendar from "@fullcalendar/react";
+import type { EventContentArg } from "@fullcalendar/core";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -23,7 +24,21 @@ export default function CalendarPage() {
     backgroundColor: "#1f1f1f",
     borderColor: "#1f1f1f",
     textColor: "#ffffff",
+    extendedProps: {
+      hasUnread: Boolean(b.hasUnread),
+    },
   }));
+
+  const renderEventContent = (info: EventContentArg) => {
+    const hasUnread = Boolean(info.event.extendedProps.hasUnread);
+
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        {hasUnread && <span className="inline-block w-2 h-2 rounded-full bg-red-500 shrink-0" title="Oläst meddelande" />}
+        <span className="truncate">{info.event.title}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -54,6 +69,7 @@ export default function CalendarPage() {
           locale="sv"
           firstDay={1}
           events={events}
+          eventContent={renderEventContent}
           eventClick={(info) => navigate(`/bookings/${info.event.id}`)}
           dateClick={(info) => navigate(`/bookings/new?date=${info.dateStr}`)}
           height="auto"
