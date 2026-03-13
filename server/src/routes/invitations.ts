@@ -105,7 +105,7 @@ router.get("/", authenticate, requireAdmin, async (_req: AuthRequest, res: Respo
 
 // Delete pending invitation (admin only)
 router.delete("/:id", authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const invitation = await prisma.invitation.findUnique({ where: { id } });
   if (!invitation) {

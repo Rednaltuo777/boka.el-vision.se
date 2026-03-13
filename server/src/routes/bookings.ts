@@ -202,12 +202,65 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
   const { date, endDate, city, courseId, customCourse, sharedNotes, privateNotes } = req.body;
 
+  const nextDate = date ? new Date(date) : booking.date;
+  const nextCity = city || booking.city;
+
+  if (Number.isNaN(nextDate.getTime())) {
+    res.status(400).json({ error: "Ogiltigt datum" });
+    return;
+  }
+
+  if (!nextCity || !(courseId || booking.courseId)) {
+    res.status(400).json({ error: "Datum, ort och kurs krävs" });
+    return;
+  }
+
+  const startOfDay = new Date(nextDate.toISOString().split("T")[0]);
+  const endOfDay = new Date(startOfDay.getTime() + 86400000);
+
+  const existingOnDate = await prisma.booking.findFirst({
+    where: {
+      id: { not: id },
+      date: {
+        gte: startOfDay,
+        lt: endOfDay,
+      },
+    },
+  });
+
+  if (existingOnDate) {
+    res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
+    return;
+  }
+
+  const dayBefore = new Date(startOfDay.getTime() - 86400000);
+  const dayAfter = new Date(startOfDay.getTime() + 86400000);
+
+  const adjacentBookings = await prisma.booking.findMany({
+    where: {
+      id: { not: id },
+      OR: [
+        { date: { gte: dayBefore, lt: startOfDay } },
+        { date: { gte: startOfDay, lt: dayAfter } },
+      ],
+    },
+  });
+
+  let distanceWarning: string | null = null;
+  for (const adjacentBooking of adjacentBookings) {
+    const warning = getDistanceWarning(nextCity, adjacentBooking.city);
+    if (warning) {
+      distanceWarning = warning;
+      break;
+    }
+  }
+
   const data: Record<string, unknown> = {};
   if (date) data.date = new Date(date);
   if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
   if (city) data.city = city;
   if (courseId) data.courseId = courseId;
-  if (customCourse !== undefined) data.customCourse = customCourse;
+  if (customCourse !== undefined) data.customCourse = customCourse || null;
   if (sharedNotes !== undefined) data.sharedNotes = sharedNotes;
   if (privateNotes !== undefined && req.userRole === "admin") data.privateNotes = privateNotes;
 
@@ -237,6 +290,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   res.json({
     ...updated,
     privateNotes: req.userRole === "admin" ? updated.privateNotes : undefined,
+    distanceWarning,
   });
 });
 

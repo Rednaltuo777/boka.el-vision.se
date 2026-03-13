@@ -2,7 +2,33 @@ import { useState, useEffect, FormEvent, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import type { Booking, ChatMessage } from "../types";
+import type { Booking, ChatMessage, Course } from "../types";
+
+type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
+
+type BookingFormState = {
+  date: string;
+  city: string;
+  courseId: string;
+  customCourse: string;
+  sharedNotes: string;
+  privateNotes: string;
+};
+
+function toDateInput(value: string) {
+  return value.split("T")[0] || value;
+}
+
+function toFormState(booking: Booking): BookingFormState {
+  return {
+    date: toDateInput(booking.date),
+    city: booking.city,
+    courseId: booking.courseId,
+    customCourse: booking.customCourse || "",
+    sharedNotes: booking.sharedNotes,
+    privateNotes: booking.privateNotes || "",
+  };
+}
 
 export default function BookingPage() {
   const { id } = useParams<{ id: string }>();
@@ -12,22 +38,36 @@ export default function BookingPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
-  const [sharedNotes, setSharedNotes] = useState("");
-  const [privateNotes, setPrivateNotes] = useState("");
+  const [form, setForm] = useState<BookingFormState>({
+    date: "",
+    city: "",
+    courseId: "",
+    customCourse: "",
+    sharedNotes: "",
+    privateNotes: "",
+  });
+  const [editMode, setEditMode] = useState(false);
+  const [useCustomCourse, setUseCustomCourse] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
 
   useEffect(() => {
     if (!id) return;
     api.get<Booking>(`/bookings/${id}`).then((b) => {
       setBooking(b);
-      setSharedNotes(b.sharedNotes);
-      setPrivateNotes(b.privateNotes || "");
+      setForm(toFormState(b));
+      setUseCustomCourse(Boolean(b.customCourse));
     });
     api.get<ChatMessage[]>(`/chat/${id}`).then(setMessages);
-  }, [id]);
+    if (isAdmin) {
+      api.get<Course[]>("/courses").then(setCourses);
+    }
+  }, [id, isAdmin]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,13 +77,70 @@ export default function BookingPage() {
     if (!id) return;
     setSaving(true);
     setSaved(false);
-    const data: Record<string, string> = { sharedNotes };
-    if (isAdmin) data.privateNotes = privateNotes;
-    const updated = await api.put<Booking>(`/bookings/${id}`, data);
-    setBooking(updated);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setError("");
+    try {
+      const data: Record<string, string> = { sharedNotes: form.sharedNotes };
+      if (isAdmin) data.privateNotes = form.privateNotes;
+      const updated = await api.put<Booking>(`/bookings/${id}`, data);
+      setBooking(updated);
+      setForm(toFormState(updated));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte spara anteckningar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateForm = (field: keyof BookingFormState, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    setSaved(false);
+    setError("");
+    setWarning("");
+  };
+
+  const saveBooking = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    setWarning("");
+
+    try {
+      const updated = await api.put<BookingUpdateResponse>(`/bookings/${id}`, {
+        date: form.date,
+        city: form.city,
+        courseId: useCustomCourse ? booking?.courseId : form.courseId,
+        customCourse: useCustomCourse ? form.customCourse : "",
+        sharedNotes: form.sharedNotes,
+        privateNotes: form.privateNotes,
+      });
+
+      setBooking(updated);
+      setForm(toFormState(updated));
+      setUseCustomCourse(Boolean(updated.customCourse));
+      setEditMode(false);
+      setSaved(true);
+      if (updated.distanceWarning) {
+        setWarning(updated.distanceWarning);
+      }
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte uppdatera bokningen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    if (!booking) return;
+    setForm(toFormState(booking));
+    setUseCustomCourse(Boolean(booking.customCourse));
+    setEditMode(false);
+    setError("");
+    setWarning("");
   };
 
   const sendMessage = async (e: FormEvent) => {
@@ -80,11 +177,42 @@ export default function BookingPage() {
               {" · "}{booking.city}
             </p>
           </div>
-          <span className="badge badge-info self-start">
-            {booking.client.company || booking.client.name}
-          </span>
+          <div className="flex items-center gap-3 self-start">
+            <span className="badge badge-info self-start">
+              {booking.client.company || booking.client.name}
+            </span>
+            {isAdmin && !editMode && (
+              <button onClick={() => setEditMode(true)} className="btn-primary">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                </svg>
+                Redigera bokning
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      {warning && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-sm">
+          <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
+          <div>
+            <p className="font-medium">Geografisk varning</p>
+            <p>{warning}</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: Details + Notes */}
@@ -92,39 +220,123 @@ export default function BookingPage() {
 
           {/* Booking Details */}
           <div className="card p-6">
-            <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Bokningsdetaljer</h2>
-            <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-              <div>
-                <p className="text-brand-400 text-xs mb-0.5">Datum</p>
-                <p className="font-medium text-brand-700">{new Date(booking.date).toLocaleDateString("sv-SE")}</p>
+            <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">
+              {editMode ? "Redigera bokning" : "Bokningsdetaljer"}
+            </h2>
+
+            {editMode && isAdmin ? (
+              <form onSubmit={saveBooking} className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Datum</label>
+                    <input type="date" value={form.date} onChange={(e) => updateForm("date", e.target.value)} required className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Ort</label>
+                    <input type="text" value={form.city} onChange={(e) => updateForm("city", e.target.value)} required className="input" placeholder="T.ex. Stockholm, Göteborg..." />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Utbildning</label>
+                  {!useCustomCourse ? (
+                    <select value={form.courseId} onChange={(e) => updateForm("courseId", e.target.value)} required className="input">
+                      <option value="">Välj utbildning...</option>
+                      {courses.map((course) => (
+                        <option key={course.id} value={course.id}>{course.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input type="text" value={form.customCourse} onChange={(e) => updateForm("customCourse", e.target.value)} className="input" placeholder="Ange kursnamn..." required />
+                  )}
+                  <label className="flex items-center gap-2 mt-2.5 text-sm text-brand-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useCustomCourse}
+                      onChange={(e) => {
+                        setUseCustomCourse(e.target.checked);
+                        setSaved(false);
+                        setError("");
+                        setWarning("");
+                      }}
+                      className="rounded border-brand-300 text-brand-700 focus:ring-brand-400"
+                    />
+                    Ange egen kurs (finns ej i listan)
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm pt-1">
+                  <div>
+                    <p className="text-brand-400 text-xs mb-0.5">Företag</p>
+                    <p className="font-medium text-brand-700">{booking.client.company || "–"}</p>
+                  </div>
+                  <div>
+                    <p className="text-brand-400 text-xs mb-0.5">Bokad av</p>
+                    <p className="font-medium text-brand-700">{booking.client.name} · {booking.client.email}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Delade anteckningar</label>
+                  <textarea value={form.sharedNotes} onChange={(e) => updateForm("sharedNotes", e.target.value)} rows={3} className="input resize-none" />
+                </div>
+
+                <div>
+                  <label className="label">Privata anteckningar</label>
+                  <textarea value={form.privateNotes} onChange={(e) => updateForm("privateNotes", e.target.value)} rows={3} className="input resize-none" />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
+                    {saving ? "Sparar..." : "Spara ändringar"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="px-4 py-2 rounded-xl border border-surface-border text-brand-500 hover:text-brand-700 hover:border-brand-200 transition-colors">
+                    Avbryt
+                  </button>
+                  {saved && (
+                    <span className="text-sm text-accent-600 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Sparat
+                    </span>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Datum</p>
+                  <p className="font-medium text-brand-700">{new Date(booking.date).toLocaleDateString("sv-SE")}</p>
+                </div>
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Ort</p>
+                  <p className="font-medium text-brand-700">{booking.city}</p>
+                </div>
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Utbildning</p>
+                  <p className="font-medium text-brand-700">{booking.customCourse || booking.course.name}</p>
+                </div>
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Företag</p>
+                  <p className="font-medium text-brand-700">{booking.client.company || "–"}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-brand-400 text-xs mb-0.5">Bokad av</p>
+                  <p className="font-medium text-brand-700">{booking.client.name} · {booking.client.email}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-brand-400 text-xs mb-0.5">Ort</p>
-                <p className="font-medium text-brand-700">{booking.city}</p>
-              </div>
-              <div>
-                <p className="text-brand-400 text-xs mb-0.5">Utbildning</p>
-                <p className="font-medium text-brand-700">{booking.customCourse || booking.course.name}</p>
-              </div>
-              <div>
-                <p className="text-brand-400 text-xs mb-0.5">Företag</p>
-                <p className="font-medium text-brand-700">{booking.client.company || "–"}</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-brand-400 text-xs mb-0.5">Bokad av</p>
-                <p className="font-medium text-brand-700">{booking.client.name} · {booking.client.email}</p>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Shared Notes */}
-          <div className="card p-6">
+          <div className={`card p-6 ${editMode && isAdmin ? "hidden" : ""}`}>
             <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Anteckningar</h2>
             <div>
               <label className="label">Delade anteckningar (synliga för båda)</label>
               <textarea
-                value={sharedNotes}
-                onChange={(e) => { setSharedNotes(e.target.value); setSaved(false); }}
+                value={form.sharedNotes}
+                onChange={(e) => updateForm("sharedNotes", e.target.value)}
                 rows={3}
                 placeholder="Skriv anteckningar här..."
                 className="input resize-none"
@@ -141,8 +353,8 @@ export default function BookingPage() {
                 </label>
                 <p className="text-xs text-brand-300 mb-2">Hotell, tåg, flyg, reseanteckningar m.m.</p>
                 <textarea
-                  value={privateNotes}
-                  onChange={(e) => { setPrivateNotes(e.target.value); setSaved(false); }}
+                  value={form.privateNotes}
+                  onChange={(e) => updateForm("privateNotes", e.target.value)}
                   rows={3}
                   placeholder="Privata anteckningar..."
                   className="input resize-none"
