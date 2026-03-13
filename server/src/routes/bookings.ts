@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
+import { sendEmail } from "../lib/email";
 import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
@@ -73,6 +74,75 @@ function getDistanceWarning(city1: string, city2: string): string | null {
     return `Varning: Avståndet mellan ${city1} och ${city2} är ca ${Math.round(km)} km (${Math.round(km / 10)} mil). Det överstiger 30 mil.`;
   }
   return null;
+}
+
+async function sendBookingConfirmationEmail(booking: {
+  id: string;
+  date: Date;
+  city: string;
+  sharedNotes: string;
+  customCourse: string | null;
+  course: { name: string };
+  client: { name: string | null; company: string | null; email: string };
+}) {
+  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").trim();
+  const bookingUrl = `${clientUrl}/bookings/${booking.id}`;
+  const courseName = booking.customCourse || booking.course.name;
+  const formattedDate = booking.date.toLocaleDateString("sv-SE", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return sendEmail({
+    to: [booking.client.email, "thomas@el-vision.se"],
+    subject: `Bokningsbekräftelse: ${courseName} ${formattedDate}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 20px; color: #1f2937;">
+        <h2 style="color: #1e3a5f; margin-bottom: 16px;">Bokningsbekräftelse</h2>
+        <p>En ny bokning har registrerats i El-Visions bokningssystem.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280; width: 160px;">Datum</td>
+            <td style="padding: 8px 0; font-weight: 600;">${formattedDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Ort</td>
+            <td style="padding: 8px 0; font-weight: 600;">${booking.city}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Utbildning</td>
+            <td style="padding: 8px 0; font-weight: 600;">${courseName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Bokad av</td>
+            <td style="padding: 8px 0; font-weight: 600;">${booking.client.name || booking.client.email}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #6b7280;">Företag</td>
+            <td style="padding: 8px 0; font-weight: 600;">${booking.client.company || "-"}</td>
+          </tr>
+        </table>
+        ${booking.sharedNotes ? `<p><strong>Anteckningar:</strong><br/>${booking.sharedNotes.replace(/\n/g, "<br/>")}</p>` : ""}
+        <p style="margin-top: 24px;">
+          <a href="${bookingUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+            Öppna bokningen
+          </a>
+        </p>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">Detta meddelande skickades automatiskt från El-Vision Bokningssystem.</p>
+      </div>
+    `,
+    text: [
+      "En ny bokning har registrerats i El-Visions bokningssystem.",
+      `Datum: ${formattedDate}`,
+      `Ort: ${booking.city}`,
+      `Utbildning: ${courseName}`,
+      `Bokad av: ${booking.client.name || booking.client.email}`,
+      `Företag: ${booking.client.company || "-"}`,
+      booking.sharedNotes ? `Anteckningar: ${booking.sharedNotes}` : "",
+      `Öppna bokningen: ${bookingUrl}`,
+    ].filter(Boolean).join("\n"),
+  });
 }
 
 // Create a booking
@@ -153,6 +223,10 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       prisma.booking.update({ where: { id: booking.id }, data: { outlookEventId: eventId } }).catch(() => {});
     }
   }).catch(() => {});
+
+  sendBookingConfirmationEmail(booking).catch((err) => {
+    console.error("Failed to send booking confirmation email:", err);
+  });
 
   res.json({ booking, distanceWarning });
 });

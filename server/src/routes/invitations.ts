@@ -1,38 +1,13 @@
 import { Router, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
-import nodemailer from "nodemailer";
 import prisma from "../lib/prisma";
+import { sendEmail } from "../lib/email";
 import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
-function createTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || "587");
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-
-  if (!host || !user || !pass) return null;
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-}
-
 async function sendInvitationEmail(toEmail: string, registerUrl: string) {
-  const transporter = createTransporter();
-  if (!transporter) {
-    console.log(`SMTP not configured. Invitation link for ${toEmail}: ${registerUrl}`);
-    return false;
-  }
-
-  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER;
-
-  await transporter.sendMail({
-    from: `"El-Vision Bokningar" <${fromAddress}>`,
+  return sendEmail({
     to: toEmail,
     subject: "Du har blivit inbjuden till El-Vision Bokningssystem",
     html: `
@@ -51,8 +26,8 @@ async function sendInvitationEmail(toEmail: string, registerUrl: string) {
         <p style="color: #999; font-size: 12px;">El-Vision – Utbildningar & bokningar</p>
       </div>
     `,
+    text: `Du har blivit inbjuden till El-Vision Bokningssystem. Registrera dig här: ${registerUrl}`,
   });
-  return true;
 }
 
 // Send invitation (admin only)
