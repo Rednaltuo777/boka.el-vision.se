@@ -137,12 +137,9 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   res.json({ booking, distanceWarning });
 });
 
-// Get all bookings (admin sees all, client sees own)
+// Get all bookings for all authenticated users
 router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
-  const where = req.userRole === "admin" ? {} : { clientId: req.userId };
-
   const bookings = await prisma.booking.findMany({
-    where,
     include: {
       course: true,
       client: { select: { id: true, name: true, company: true, email: true } },
@@ -172,11 +169,6 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
   if (!booking) {
     res.status(404).json({ error: "Bokning ej hittad" });
-    return;
-  }
-
-  if (req.userRole !== "admin" && booking.clientId !== req.userId) {
-    res.status(403).json({ error: "Åtkomst nekad" });
     return;
   }
 
