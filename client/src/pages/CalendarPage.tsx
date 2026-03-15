@@ -133,16 +133,16 @@ export default function CalendarPage() {
     const displayTitle = isMaskedPrivate ? "+Privat händelse" : info.event.title;
 
     return (
-      <div className="min-w-0 leading-tight">
+      <div className="min-w-0 leading-tight py-0.5">
         {city && !isMaskedPrivate && (
-          <div className="truncate text-[10px] font-medium text-white/80 mb-0.5">{city}</div>
+          <div className="truncate text-[10px] font-semibold text-brand-700 mb-0.5">{city}</div>
         )}
         <div className="flex items-center gap-1 min-w-0">
           {logoUrl && !isMaskedPrivate && (
             <img
               src={logoUrl}
               alt=""
-              className="h-4 w-4 rounded-sm object-cover border border-white/30 bg-white shrink-0"
+              className="h-4 w-4 rounded-sm object-cover border border-slate-300 bg-white shrink-0"
             />
           )}
           {hasUnread && (
