@@ -4,6 +4,8 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import type { Booking, ChatMessage, Course } from "../types";
 
+const PRIVATE_OPTION = "__private__";
+
 type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
 
 type BookingFormState = {
@@ -302,8 +304,23 @@ export default function BookingPage() {
                 <div>
                   <label className="label">Utbildning</label>
                   {!useCustomCourse ? (
-                    <select value={form.courseId} onChange={(e) => updateForm("courseId", e.target.value)} required className="input">
+                    <select
+                      value={form.isPrivate ? PRIVATE_OPTION : form.courseId}
+                      onChange={(e) => {
+                        if (e.target.value === PRIVATE_OPTION) {
+                          setForm((current) => ({ ...current, isPrivate: true }));
+                          return;
+                        }
+                        setForm((current) => ({ ...current, isPrivate: false, courseId: e.target.value }));
+                        setSaved(false);
+                        setError("");
+                        setWarning("");
+                      }}
+                      required
+                      className="input"
+                    >
                       <option value="">Välj utbildning...</option>
+                      <option value={PRIVATE_OPTION}>*Privat*</option>
                       {courses.map((course) => (
                         <option key={course.id} value={course.id}>{course.name}</option>
                       ))}

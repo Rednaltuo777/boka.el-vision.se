@@ -4,6 +4,8 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import type { Course, Booking } from "../types";
 
+const PRIVATE_OPTION = "__private__";
+
 export default function NewBookingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -126,8 +128,21 @@ export default function NewBookingPage() {
         <div>
           <label className="label">Utbildning</label>
           {!useCustomCourse ? (
-            <select value={form.courseId} onChange={(e) => update("courseId", e.target.value)} required className="input">
+            <select
+              value={form.isPrivate ? PRIVATE_OPTION : form.courseId}
+              onChange={(e) => {
+                if (e.target.value === PRIVATE_OPTION) {
+                  update("isPrivate", true);
+                  return;
+                }
+                update("isPrivate", false);
+                update("courseId", e.target.value);
+              }}
+              required
+              className="input"
+            >
               <option value="">Välj utbildning...</option>
+              {isAdmin && <option value={PRIVATE_OPTION}>*Privat*</option>}
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
