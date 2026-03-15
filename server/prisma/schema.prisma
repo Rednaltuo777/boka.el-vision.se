@@ -15,6 +15,7 @@ model User {
   password    String?
   name        String?
   company     String?
+  logoUrl     String?
   department  String?
   phone       String?
   role        String   @default("client") // "admin" | "client"

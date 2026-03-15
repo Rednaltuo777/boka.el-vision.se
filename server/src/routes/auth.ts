@@ -77,7 +77,7 @@ router.post("/register", async (req, res: Response) => {
 router.get("/me", authenticate, async (req: AuthRequest, res: Response) => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
-    select: { id: true, email: true, name: true, company: true, department: true, phone: true, role: true },
+    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true },
   });
   if (!user) {
     res.status(404).json({ error: "Användare ej hittad" });

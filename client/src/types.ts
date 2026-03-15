@@ -3,6 +3,7 @@ export interface User {
   email: string;
   name: string | null;
   company: string | null;
+  logoUrl?: string | null;
   department: string | null;
   phone: string | null;
   role: "admin" | "client";
@@ -26,7 +27,7 @@ export interface Booking {
   courseId: string;
   clientId: string;
   course: Course;
-  client: Pick<User, "id" | "name" | "company" | "email">;
+  client: Pick<User, "id" | "name" | "company" | "email" | "logoUrl">;
   createdAt: string;
   updatedAt: string;
   hasUnread?: boolean;

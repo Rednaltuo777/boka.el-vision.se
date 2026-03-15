@@ -229,6 +229,11 @@ export default function BookingPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 self-start">
+            {booking.client.logoUrl && (
+              <div className="h-12 w-12 rounded-xl border border-surface-border bg-white overflow-hidden shrink-0">
+                <img src={booking.client.logoUrl} alt={booking.client.company || booking.client.name || "Logotyp"} className="h-full w-full object-contain" />
+              </div>
+            )}
             <span className="badge badge-info self-start">
               {booking.client.company || booking.client.name}
             </span>

@@ -10,6 +10,9 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState("");
+  const [savingLogo, setSavingLogo] = useState(false);
 
   useEffect(() => {
     if (user?.role !== "admin") return;
@@ -41,6 +44,31 @@ export default function UsersPage() {
       setInvitations((prev) => prev.filter((inv) => inv.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte radera inbjudan");
+    }
+  };
+
+  const startEditingLogo = (selectedUser: User) => {
+    setError("");
+    setMessage("");
+    setEditingUserId(selectedUser.id);
+    setLogoUrl(selectedUser.logoUrl || "");
+  };
+
+  const saveLogo = async (userId: string) => {
+    setSavingLogo(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const updatedUser = await api.put<User>(`/users/${userId}`, { logoUrl });
+      setUsers((current) => current.map((item) => item.id === userId ? updatedUser : item));
+      setEditingUserId(null);
+      setLogoUrl("");
+      setMessage("Logotypen sparades.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte spara logotypen");
+    } finally {
+      setSavingLogo(false);
     }
   };
 
@@ -138,19 +166,68 @@ export default function UsersPage() {
           </div>
           <div className="divide-y divide-surface-border">
             {users.map((u) => (
-              <div key={u.id} className="p-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-brand-100 flex items-center justify-center text-sm font-bold text-brand-600 shrink-0">
-                  {u.name?.[0]?.toUpperCase() || "?"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-brand-700 truncate">{u.name || "–"}</p>
-                    <span className={`badge ${u.role === "admin" ? "badge-admin" : "badge-info"}`}>
-                      {u.role === "admin" ? "Admin" : "Uppdragsgivare"}
-                    </span>
+              <div key={u.id} className="p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-brand-100 border border-surface-border overflow-hidden flex items-center justify-center text-sm font-bold text-brand-600 shrink-0">
+                    {u.logoUrl ? (
+                      <img src={u.logoUrl} alt={u.company || u.name || "Logotyp"} className="h-full w-full object-contain bg-white" />
+                    ) : (
+                      u.name?.[0]?.toUpperCase() || "?"
+                    )}
                   </div>
-                  <p className="text-xs text-brand-400 truncate">{u.company ? `${u.company} · ` : ""}{u.email}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-brand-700 truncate">{u.name || "–"}</p>
+                      <span className={`badge ${u.role === "admin" ? "badge-admin" : "badge-info"}`}>
+                        {u.role === "admin" ? "Admin" : "Uppdragsgivare"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-brand-400 truncate">{u.company ? `${u.company} · ` : ""}{u.email}</p>
+                  </div>
+                  {u.role !== "admin" && (
+                    <button
+                      type="button"
+                      onClick={() => startEditingLogo(u)}
+                      className="inline-flex items-center rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-brand-500 hover:bg-surface-secondary"
+                    >
+                      Logotyp
+                    </button>
+                  )}
                 </div>
+
+                {editingUserId === u.id && u.role !== "admin" && (
+                  <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
+                    <label className="label">Logotyp-URL</label>
+                    <input
+                      type="url"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      placeholder="https://.../logo.png"
+                      className="input"
+                    />
+                    <p className="text-xs text-brand-400">Ange en publik bildlänk till uppdragsgivarens logotyp.</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void saveLogo(u.id)}
+                        disabled={savingLogo}
+                        className="btn-primary disabled:opacity-50"
+                      >
+                        {savingLogo ? "Sparar..." : "Spara logotyp"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingUserId(null);
+                          setLogoUrl("");
+                        }}
+                        className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                      >
+                        Avbryt
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

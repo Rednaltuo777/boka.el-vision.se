@@ -35,7 +35,7 @@ function serializeBooking(booking: any, req: AuthRequest) {
     ...booking,
     customCourse: isMaskedPrivate ? null : booking.customCourse,
     course: isMaskedPrivate ? { ...booking.course, name: "Privat", isCustom: false } : booking.course,
-    client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "" } : booking.client,
+    client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "", logoUrl: null } : booking.client,
     city: isMaskedPrivate ? "Privat" : booking.city,
     sharedNotes: isMaskedPrivate ? "" : booking.sharedNotes,
     privateNotes: req.userRole === "admin" && !isMaskedPrivate ? booking.privateNotes : undefined,
@@ -347,7 +347,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       },
       include: {
         course: true,
-        client: { select: { id: true, name: true, company: true, email: true } },
+        client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
       },
     })),
   );
@@ -388,7 +388,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
   const bookings = await prisma.booking.findMany({
     include: {
       course: true,
-      client: { select: { id: true, name: true, company: true, email: true } },
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
       chatMessages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -415,7 +415,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     where: { id },
     include: {
       course: true,
-      client: { select: { id: true, name: true, company: true, email: true } },
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
       chatMessages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -540,7 +540,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     data,
     include: {
       course: true,
-      client: { select: { id: true, name: true, company: true, email: true } },
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
     },
   });
 
