@@ -102,20 +102,15 @@ export default function UsersPage() {
 
     setError("");
     setMessage("");
-    setSavingLogo(true);
 
     try {
       const nextLogoUrl = await readFileAsDataUrl(file);
-      const updatedUser = await api.put<User>(`/users/${selectedUserId}`, { logoUrl: nextLogoUrl });
-      setUsers((current) => current.map((item) => item.id === selectedUserId ? updatedUser : item));
       setEditingUserId(selectedUserId);
-      setLogoUrl(updatedUser.logoUrl || nextLogoUrl);
+      setLogoUrl(nextLogoUrl);
       setBrokenLogoUserIds((current) => current.filter((id) => id !== selectedUserId));
-      setMessage("Logotypen laddades upp.");
+      setMessage("Bild vald. Klicka på Spara logotyp för att spara den.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte ladda upp logotypen");
-    } finally {
-      setSavingLogo(false);
     }
   };
 
@@ -282,9 +277,9 @@ export default function UsersPage() {
                       <label className="label">Förhandsvisning</label>
                       <div className="mt-2 flex items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
                         <div className="h-20 w-20 rounded-2xl border border-surface-border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
-                          {((logoUrl || u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
+                          {((editingUserId === u.id ? logoUrl : u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
                             <img
-                              src={logoUrl || u.logoUrl || ""}
+                              src={editingUserId === u.id ? logoUrl || u.logoUrl || "" : u.logoUrl || ""}
                               alt={u.company || u.name || "Logotyp"}
                               className="h-full w-full object-contain bg-white p-2"
                               onError={() => setBrokenLogoUserIds((current) => current.includes(u.id) ? current : [...current, u.id])}

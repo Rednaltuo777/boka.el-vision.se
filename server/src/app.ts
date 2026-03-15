@@ -13,7 +13,7 @@ const app = express();
 
 const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").trim();
 app.use(cors({ origin: clientUrl, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
