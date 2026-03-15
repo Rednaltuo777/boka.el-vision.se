@@ -80,6 +80,7 @@ export default function CalendarPage() {
       extendedProps: {
         eventType: "booking",
         hasUnread: Boolean(b.hasUnread),
+        logoUrl: b.client.logoUrl || null,
       },
     })),
     ...blockingPeriods.map((period) => ({
@@ -111,6 +112,7 @@ export default function CalendarPage() {
     }
 
     const hasUnread = Boolean(info.event.extendedProps.hasUnread);
+    const logoUrl = typeof info.event.extendedProps.logoUrl === "string" ? info.event.extendedProps.logoUrl : null;
     const start = info.event.start ? formatTime(info.event.start.toISOString()) : null;
     const end = info.event.end ? formatTime(info.event.end.toISOString()) : null;
     const timeLabel = start && end ? `${start}-${end}` : null;
@@ -119,6 +121,13 @@ export default function CalendarPage() {
 
     return (
       <div className="flex items-center gap-1 min-w-0">
+        {logoUrl && !isMaskedPrivate && (
+          <img
+            src={logoUrl}
+            alt=""
+            className="h-4 w-4 rounded-sm object-cover border border-white/30 bg-white shrink-0"
+          />
+        )}
         {hasUnread && (
           <span className="inline-flex items-center justify-center text-red-500 shrink-0" title="Oläst meddelande">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
