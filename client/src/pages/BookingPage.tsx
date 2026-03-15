@@ -84,6 +84,7 @@ export default function BookingPage() {
   const [editMode, setEditMode] = useState(false);
   const [useCustomCourse, setUseCustomCourse] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
@@ -193,6 +194,26 @@ export default function BookingPage() {
     setWarning("");
   };
 
+  const deleteBooking = async () => {
+    if (!id || !isAdmin || !booking) return;
+
+    const confirmed = window.confirm(`Ta bort bokningen \"${booking.displayTitle || booking.customCourse || booking.course.name}\"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      await api.delete<{ success: boolean }>(`/bookings/${id}`);
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte ta bort bokningen");
+      setDeleting(false);
+    }
+  };
+
   const sendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || !id) return;
@@ -228,7 +249,7 @@ export default function BookingPage() {
               {" · "}{booking.city}
             </p>
           </div>
-          <div className="flex items-center gap-3 self-start">
+          <div className="flex items-start gap-3 self-start">
             {booking.client.logoUrl && (
               <div className="h-12 w-12 rounded-xl border border-surface-border bg-white overflow-hidden shrink-0">
                 <img src={booking.client.logoUrl} alt={booking.client.company || booking.client.name || "Logotyp"} className="h-full w-full object-contain" />
@@ -238,12 +259,25 @@ export default function BookingPage() {
               {booking.client.company || booking.client.name}
             </span>
             {isAdmin && !editMode && (
-              <button onClick={() => setEditMode(true)} className="btn-primary">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
-                </svg>
-                Redigera bokning
-              </button>
+              <div className="flex flex-col gap-2 self-start">
+                <button onClick={() => setEditMode(true)} className="btn-primary">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+                  </svg>
+                  Redigera bokning
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteBooking()}
+                  disabled={deleting}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.327L4.772 5.79m14.456 0A48.108 48.108 0 0 0 15.75 5.25m3.478.54a48.11 48.11 0 0 1-7.5 0m7.5 0V4.875c0-1.026-.79-1.891-1.816-1.966A52.816 52.816 0 0 0 12 2.25c-1.159 0-2.312.04-3.462.118-1.026.075-1.816.94-1.816 1.966v.915m7.5 0a48.667 48.667 0 0 1-7.5 0" />
+                  </svg>
+                  {deleting ? "Tar bort..." : "Ta bort bokningen"}
+                </button>
+              </div>
             )}
           </div>
         </div>
