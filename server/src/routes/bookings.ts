@@ -104,11 +104,37 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function getDistanceWarning(city1: string, city2: string): string | null {
-  const c1 = CITY_COORDS[city1.toLowerCase()];
-  const c2 = CITY_COORDS[city2.toLowerCase()];
+function normalizeCity(city: string): string {
+  return city.trim().toLowerCase();
+}
+
+function getCityDistanceKm(city1: string, city2: string): number | null {
+  const c1 = CITY_COORDS[normalizeCity(city1)];
+  const c2 = CITY_COORDS[normalizeCity(city2)];
   if (!c1 || !c2) return null;
-  const km = haversineKm(c1[0], c1[1], c2[0], c2[1]);
+  return haversineKm(c1[0], c1[1], c2[0], c2[1]);
+}
+
+function getEstimatedTravelMinutes(city1: string, city2: string): number {
+  if (normalizeCity(city1) === normalizeCity(city2)) {
+    return 0;
+  }
+
+  const km = getCityDistanceKm(city1, city2);
+  if (km === null) {
+    return 0;
+  }
+
+  return Math.ceil((km / 80) * 60) + 30;
+}
+
+function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
+  return startA < endB && startB < endA;
+}
+
+function getDistanceWarning(city1: string, city2: string): string | null {
+  const km = getCityDistanceKm(city1, city2);
+  if (km === null) return null;
   // 30 Swedish miles = 300 km
   if (km > 300) {
     return `Varning: Avståndet mellan ${city1} och ${city2} är ca ${Math.round(km)} km (${Math.round(km / 10)} mil). Det överstiger 30 mil.`;
@@ -169,8 +195,8 @@ async function findBlockingPeriodForDate(dateValue: Date) {
   });
 }
 
-async function findBookingOnDate(dateValue: Date, excludeBookingId?: string) {
-  return prisma.booking.findFirst({
+async function findBookingsOnDate(dateValue: Date, excludeBookingId?: string) {
+  return prisma.booking.findMany({
     where: {
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
       date: {
@@ -178,7 +204,49 @@ async function findBookingOnDate(dateValue: Date, excludeBookingId?: string) {
         lt: endOfDay(dateValue),
       },
     },
+    select: {
+      id: true,
+      date: true,
+      endDate: true,
+      city: true,
+    },
+    orderBy: { date: "asc" },
   });
+}
+
+async function findSameDaySchedulingConflict(
+  bookingDate: Date,
+  bookingEndDate: Date,
+  city: string,
+  excludeBookingId?: string,
+) {
+  const bookingsOnDate = await findBookingsOnDate(bookingDate, excludeBookingId);
+
+  for (const existingBooking of bookingsOnDate) {
+    const existingEndDate = existingBooking.endDate ?? existingBooking.date;
+
+    if (rangesOverlap(bookingDate, bookingEndDate, existingBooking.date, existingEndDate)) {
+      return `Tiden krockar med en annan bokning samma dag (${toTimeLabel(existingBooking.date) || "okänd tid"}-${toTimeLabel(existingEndDate) || "okänd tid"}).`;
+    }
+
+    const requiredTravelMinutes = getEstimatedTravelMinutes(city, existingBooking.city);
+    if (requiredTravelMinutes === 0) {
+      continue;
+    }
+
+    const newBookingStartsAfterExisting = bookingDate >= existingEndDate;
+    const travelGapMs = newBookingStartsAfterExisting
+      ? bookingDate.getTime() - existingEndDate.getTime()
+      : existingBooking.date.getTime() - bookingEndDate.getTime();
+
+    const requiredTravelMs = requiredTravelMinutes * 60 * 1000;
+
+    if (travelGapMs >= 0 && travelGapMs < requiredTravelMs) {
+      return `Det finns inte tillrackligt med restid mellan ${existingBooking.city} och ${city} samma dag.`;
+    }
+  }
+
+  return null;
 }
 
 async function sendBookingConfirmationEmail(booking: {
@@ -306,9 +374,9 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const existingOnDate = await findBookingOnDate(bookingDate);
-    if (existingOnDate) {
-      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Det går inte att boka flera utbildningar samma dag." });
+    const schedulingConflict = await findSameDaySchedulingConflict(bookingDate, bookingEndDate, city);
+    if (schedulingConflict) {
+      res.status(409).json({ error: schedulingConflict });
       return;
     }
 
@@ -488,9 +556,9 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   const startOfBookingDay = startOfDay(nextDate);
   const endOfBookingDay = endOfDay(nextDate);
 
-  const existingOnDate = await findBookingOnDate(nextDate, id);
-  if (existingOnDate) {
-    res.status(409).json({ error: "Det finns redan en bokning på detta datum. Det går inte att boka flera utbildningar samma dag." });
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate || nextDate, nextCity, id);
+  if (schedulingConflict) {
+    res.status(409).json({ error: schedulingConflict });
     return;
   }
 
