@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
-import { getGoogleMapsTravelMinutes } from "../lib/googleMaps";
+import { getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
 import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
@@ -139,12 +139,12 @@ async function getRequiredTravelMinutes(city1: string, city2: string): Promise<n
   }
 
   try {
-    const googleTravelMinutes = await getGoogleMapsTravelMinutes(city1, city2);
-    if (googleTravelMinutes !== null) {
-      return googleTravelMinutes;
+    const openRouteServiceTravelMinutes = await getOpenRouteServiceTravelMinutes(city1, city2);
+    if (openRouteServiceTravelMinutes !== null) {
+      return openRouteServiceTravelMinutes;
     }
   } catch (error) {
-    console.error("Google Maps travel time lookup failed:", error);
+    console.error("OpenRouteService travel time lookup failed:", error);
   }
 
   return getEstimatedTravelMinutes(city1, city2);
