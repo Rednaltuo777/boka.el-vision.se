@@ -3,6 +3,17 @@ import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import type { User, Invitation } from "../types";
 
+const MAX_LOGO_FILE_SIZE = 2 * 1024 * 1024;
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Kunde inte läsa bildfilen"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function UsersPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -67,6 +78,39 @@ export default function UsersPage() {
       setMessage("Logotypen sparades.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte spara logotypen");
+    } finally {
+      setSavingLogo(false);
+    }
+  };
+
+  const handleLogoFileChange = async (selectedUserId: string, file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError("Välj en bildfil för logotypen");
+      return;
+    }
+
+    if (file.size > MAX_LOGO_FILE_SIZE) {
+      setError("Bildfilen är för stor. Välj en fil som är mindre än 2 MB.");
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setSavingLogo(true);
+
+    try {
+      const nextLogoUrl = await readFileAsDataUrl(file);
+      const updatedUser = await api.put<User>(`/users/${selectedUserId}`, { logoUrl: nextLogoUrl });
+      setUsers((current) => current.map((item) => item.id === selectedUserId ? updatedUser : item));
+      setEditingUserId(null);
+      setLogoUrl("");
+      setMessage("Logotypen laddades upp.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte ladda upp logotypen");
     } finally {
       setSavingLogo(false);
     }
@@ -197,6 +241,23 @@ export default function UsersPage() {
 
                 {editingUserId === u.id && u.role !== "admin" && (
                   <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
+                    <div>
+                      <label className="label">Ladda upp logotyp</label>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={(e) => void handleLogoFileChange(u.id, e.target.files?.[0] || null)}
+                        className="block w-full rounded-xl border border-surface-border bg-white px-3 py-2 text-sm text-brand-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-200"
+                      />
+                      <p className="mt-2 text-xs text-brand-400">PNG, JPG, WebP eller SVG. Max 2 MB.</p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-surface-border" />
+                      <span className="text-xs font-medium uppercase tracking-wide text-brand-300">eller</span>
+                      <div className="h-px flex-1 bg-surface-border" />
+                    </div>
+
                     <label className="label">Logotyp-URL</label>
                     <input
                       type="url"
