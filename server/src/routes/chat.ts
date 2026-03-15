@@ -4,6 +4,10 @@ import { authenticate, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
+function canAccessChat(booking: { clientId: string }, req: AuthRequest) {
+  return req.userRole === "admin" || booking.clientId === req.userId;
+}
+
 // Get chat messages for a booking
 router.get("/:bookingId", authenticate, async (req: AuthRequest, res: Response) => {
   const bookingId = req.params.bookingId as string;
@@ -13,7 +17,7 @@ router.get("/:bookingId", authenticate, async (req: AuthRequest, res: Response) 
     return;
   }
 
-  if (booking.isPrivate && req.userRole !== "admin" && booking.clientId !== req.userId) {
+  if (!canAccessChat(booking, req)) {
     res.status(403).json({ error: "Åtkomst nekad" });
     return;
   }
@@ -54,7 +58,7 @@ router.post("/:bookingId", authenticate, async (req: AuthRequest, res: Response)
     return;
   }
 
-  if (booking.isPrivate && req.userRole !== "admin" && booking.clientId !== req.userId) {
+  if (!canAccessChat(booking, req)) {
     res.status(403).json({ error: "Åtkomst nekad" });
     return;
   }

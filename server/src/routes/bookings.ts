@@ -39,8 +39,10 @@ function serializeBooking(booking: any, req: AuthRequest) {
     city: isMaskedPrivate ? "Privat" : booking.city,
     sharedNotes: isMaskedPrivate ? "" : booking.sharedNotes,
     privateNotes: req.userRole === "admin" && !isMaskedPrivate ? booking.privateNotes : undefined,
+    hasUnread: isOwnerOrAdmin ? Boolean(booking.hasUnread) : false,
+    latestChatAt: isOwnerOrAdmin ? booking.latestChatAt : null,
     displayTitle: isMaskedPrivate ? "Privat" : toBookingTitle(booking, req),
-    canAccessChat: !booking.isPrivate || isOwnerOrAdmin,
+    canAccessChat: isOwnerOrAdmin,
   };
 }
 
@@ -60,6 +62,7 @@ function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; aut
   return {
     ...booking,
     hasUnread,
+    latestChatAt: latestMessage?.createdAt ?? null,
   };
 }
 

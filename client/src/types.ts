@@ -30,6 +30,7 @@ export interface Booking {
   createdAt: string;
   updatedAt: string;
   hasUnread?: boolean;
+  latestChatAt?: string | null;
   displayTitle?: string;
   canAccessChat?: boolean;
 }

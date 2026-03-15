@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import type { Booking, ChatMessage, Course } from "../types";
@@ -60,9 +60,11 @@ function toFormState(booking: Booking): BookingFormState {
 export default function BookingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatSectionRef = useRef<HTMLDivElement>(null);
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -111,6 +113,12 @@ export default function BookingPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (location.hash === "#chat" && booking?.canAccessChat !== false) {
+      chatSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.hash, booking?.canAccessChat]);
 
   const saveNotes = async () => {
     if (!id) return;
@@ -473,7 +481,7 @@ export default function BookingPage() {
         </div>
 
         {/* Right column: Chat */}
-        <div className="lg:col-span-1">
+        <div ref={chatSectionRef} className="lg:col-span-1" id="chat">
           <div className="card flex flex-col h-[500px]">
             <div className="p-4 border-b border-surface-border">
               <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide flex items-center gap-2">

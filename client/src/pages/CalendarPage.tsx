@@ -60,6 +60,14 @@ export default function CalendarPage() {
     loadCalendarData().catch(() => {});
   }, []);
 
+  const unreadChats = bookings
+    .filter((booking) => booking.canAccessChat !== false && booking.hasUnread)
+    .sort((left, right) => {
+      const leftTime = left.latestChatAt ? new Date(left.latestChatAt).getTime() : 0;
+      const rightTime = right.latestChatAt ? new Date(right.latestChatAt).getTime() : 0;
+      return rightTime - leftTime;
+    });
+
   const events = [
     ...bookings.map((b) => ({
       id: b.id,
@@ -176,6 +184,52 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar */}
+      <div className="card p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-brand-800">Chattindikering</h2>
+            <p className="text-sm text-brand-400 mt-1">
+              {unreadChats.length > 0
+                ? `${unreadChats.length} olästa chatt${unreadChats.length === 1 ? "" : "ar"}`
+                : "Inga olästa chattar just nu"}
+            </p>
+          </div>
+          {unreadChats.length > 0 && (
+            <span className="inline-flex min-w-8 items-center justify-center rounded-full bg-red-100 px-2.5 py-1 text-sm font-semibold text-red-600">
+              {unreadChats.length}
+            </span>
+          )}
+        </div>
+
+        {unreadChats.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {unreadChats.map((booking) => (
+              <button
+                key={booking.id}
+                type="button"
+                onClick={() => navigate(`/bookings/${booking.id}#chat`)}
+                className="w-full rounded-2xl border border-surface-border bg-white px-4 py-3 text-left transition-colors hover:bg-surface-secondary"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-brand-700 truncate">{booking.displayTitle || booking.customCourse || booking.course.name}</p>
+                    <p className="text-sm text-brand-400 mt-1">
+                      {new Date(booking.date).toLocaleDateString("sv-SE")} · {booking.city}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 shrink-0">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 7.5v9A2.25 2.25 0 0 1 19.5 18.75h-15A2.25 2.25 0 0 1 2.25 16.5v-9m19.5 0A2.25 2.25 0 0 0 19.5 5.25h-15A2.25 2.25 0 0 0 2.25 7.5m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 9.66A2.25 2.25 0 0 1 2.25 7.743V7.5" />
+                    </svg>
+                    Oläst
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <div className="card p-5">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
