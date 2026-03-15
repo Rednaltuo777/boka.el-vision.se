@@ -117,9 +117,31 @@ function combineDateAndTime(dateValue: string, timeValue: string): Date {
   return new Date(`${dateValue}T${timeValue}`);
 }
 
+function startOfDay(dateValue: Date): Date {
+  return new Date(Date.UTC(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate()));
+}
+
+function endOfDay(dateValue: Date): Date {
+  return new Date(startOfDay(dateValue).getTime() + 86400000);
+}
+
 function toTimeLabel(dateValue: Date | null): string | null {
   if (!dateValue) return null;
   return dateValue.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function getBlockingPeriodLabel(type: string): string {
+  return type === "vacation" ? "semester" : "spärrad period";
+}
+
+async function findBlockingPeriodForDate(dateValue: Date) {
+  return prisma.blockingPeriod.findFirst({
+    where: {
+      startDate: { lt: endOfDay(dateValue) },
+      endDate: { gt: startOfDay(dateValue) },
+    },
+    orderBy: { startDate: "asc" },
+  });
 }
 
 async function sendBookingConfirmationEmail(booking: {
@@ -221,13 +243,19 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
+  const blockingPeriod = await findBlockingPeriodForDate(bookingDate);
+  if (blockingPeriod) {
+    res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
+    return;
+  }
+
   // Check for double booking on the same date
   if (req.userRole !== "admin") {
     const existingOnDate = await prisma.booking.findFirst({
       where: {
         date: {
-          gte: new Date(bookingDate.toISOString().split("T")[0]),
-          lt: new Date(new Date(bookingDate.toISOString().split("T")[0]).getTime() + 86400000),
+          gte: startOfDay(bookingDate),
+          lt: endOfDay(bookingDate),
         },
       },
     });
@@ -389,21 +417,27 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
+  const blockingPeriod = await findBlockingPeriodForDate(nextDate);
+  if (blockingPeriod) {
+    res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
+    return;
+  }
+
   if (!nextCity || !(courseId || booking.courseId)) {
     res.status(400).json({ error: "Datum, ort och kurs krävs" });
     return;
   }
 
-  const startOfDay = new Date(nextDate.toISOString().split("T")[0]);
-  const endOfDay = new Date(startOfDay.getTime() + 86400000);
+  const startOfBookingDay = startOfDay(nextDate);
+  const endOfBookingDay = endOfDay(nextDate);
 
   if (req.userRole !== "admin") {
     const existingOnDate = await prisma.booking.findFirst({
       where: {
         id: { not: id },
         date: {
-          gte: startOfDay,
-          lt: endOfDay,
+          gte: startOfBookingDay,
+          lt: endOfBookingDay,
         },
       },
     });
@@ -414,15 +448,15 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     }
   }
 
-  const dayBefore = new Date(startOfDay.getTime() - 86400000);
-  const dayAfter = new Date(startOfDay.getTime() + 86400000);
+  const dayBefore = new Date(startOfBookingDay.getTime() - 86400000);
+  const dayAfter = new Date(startOfBookingDay.getTime() + 86400000);
 
   const adjacentBookings = await prisma.booking.findMany({
     where: {
       id: { not: id },
       OR: [
-        { date: { gte: dayBefore, lt: startOfDay } },
-        { date: { gte: startOfDay, lt: dayAfter } },
+        { date: { gte: dayBefore, lt: startOfBookingDay } },
+        { date: { gte: startOfBookingDay, lt: dayAfter } },
       ],
     },
   });

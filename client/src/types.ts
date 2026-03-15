@@ -34,6 +34,16 @@ export interface Booking {
   canAccessChat?: boolean;
 }
 
+export interface BlockingPeriod {
+  id: string;
+  startDate: string;
+  endDate: string;
+  type: "vacation" | "blocked";
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+}
+
 export interface ChatMessage {
   id: string;
   content: string;

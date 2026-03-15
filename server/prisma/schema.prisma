@@ -23,6 +23,7 @@ model User {
 
   invitations  Invitation[]
   bookings     Booking[]     @relation("BookingClient")
+  blockingPeriods BlockingPeriod[]
   chatMessages ChatMessage[]
   chatReads    BookingChatRead[]
 }
@@ -67,6 +68,18 @@ model Booking {
   chatMessages   ChatMessage[]
   chatReads      BookingChatRead[]
   outlookEventId String?
+}
+
+model BlockingPeriod {
+  id        String   @id @default(uuid())
+  startDate DateTime
+  endDate   DateTime
+  type      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdById String
 }
 
 model BookingChatRead {
