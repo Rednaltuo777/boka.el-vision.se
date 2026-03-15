@@ -16,6 +16,13 @@ export default function NewBookingPage() {
   const [warning, setWarning] = useState("");
   const [useCustomCourse, setUseCustomCourse] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [courseManagerOpen, setCourseManagerOpen] = useState(false);
+  const [courseManagerLoading, setCourseManagerLoading] = useState(false);
+  const [courseManagerError, setCourseManagerError] = useState("");
+  const [courseManagerSuccess, setCourseManagerSuccess] = useState("");
+  const [newCourseName, setNewCourseName] = useState("");
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [editingCourseName, setEditingCourseName] = useState("");
 
   const [form, setForm] = useState({
     date: searchParams.get("date") || "",
@@ -33,6 +40,16 @@ export default function NewBookingPage() {
     api.get<Course[]>("/courses").then(setCourses);
   }, []);
 
+  const loadCourses = async () => {
+    const nextCourses = await api.get<Course[]>("/courses");
+    setCourses(nextCourses);
+  };
+
+  const resetCourseManagerMessages = () => {
+    setCourseManagerError("");
+    setCourseManagerSuccess("");
+  };
+
   const update = (field: string, value: string | boolean) => setForm((current) => {
     if (field === "date" && typeof value === "string") {
       const nextDateTo = !current.dateTo || current.dateTo < value ? value : current.dateTo;
@@ -41,6 +58,74 @@ export default function NewBookingPage() {
 
     return { ...current, [field]: value };
   });
+
+  const addCourse = async () => {
+    resetCourseManagerMessages();
+    setCourseManagerLoading(true);
+
+    try {
+      const createdCourse = await api.post<Course>("/courses", { name: newCourseName });
+      await loadCourses();
+      setNewCourseName("");
+      setCourseManagerSuccess("Kursen lades till.");
+      setForm((current) => ({ ...current, courseId: createdCourse.id, isPrivate: false }));
+      setUseCustomCourse(false);
+    } catch (err) {
+      setCourseManagerError(err instanceof Error ? err.message : "Kunde inte lägga till kursen");
+    } finally {
+      setCourseManagerLoading(false);
+    }
+  };
+
+  const startEditingCourse = (course: Course) => {
+    resetCourseManagerMessages();
+    setEditingCourseId(course.id);
+    setEditingCourseName(course.name);
+  };
+
+  const saveCourse = async (courseId: string) => {
+    resetCourseManagerMessages();
+    setCourseManagerLoading(true);
+
+    try {
+      await api.put<Course>(`/courses/${courseId}`, { name: editingCourseName });
+      await loadCourses();
+      setEditingCourseId(null);
+      setEditingCourseName("");
+      setCourseManagerSuccess("Kursen uppdaterades.");
+    } catch (err) {
+      setCourseManagerError(err instanceof Error ? err.message : "Kunde inte uppdatera kursen");
+    } finally {
+      setCourseManagerLoading(false);
+    }
+  };
+
+  const deleteCourse = async (course: Course) => {
+    if (!window.confirm(`Radera kursen \"${course.name}\"?`)) {
+      return;
+    }
+
+    resetCourseManagerMessages();
+    setCourseManagerLoading(true);
+
+    try {
+      await api.delete<{ success: boolean }>(`/courses/${course.id}`);
+      const nextCourses = await api.get<Course[]>("/courses");
+      setCourses(nextCourses);
+      setCourseManagerSuccess("Kursen raderades.");
+      if (form.courseId === course.id) {
+        setForm((current) => ({ ...current, courseId: "" }));
+      }
+      if (editingCourseId === course.id) {
+        setEditingCourseId(null);
+        setEditingCourseName("");
+      }
+    } catch (err) {
+      setCourseManagerError(err instanceof Error ? err.message : "Kunde inte radera kursen");
+    } finally {
+      setCourseManagerLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -156,25 +241,39 @@ export default function NewBookingPage() {
         <div>
           <label className="label">Utbildning</label>
           {!useCustomCourse ? (
-            <select
-              value={form.isPrivate ? PRIVATE_OPTION : form.courseId}
-              onChange={(e) => {
-                if (e.target.value === PRIVATE_OPTION) {
-                  update("isPrivate", true);
-                  return;
-                }
-                update("isPrivate", false);
-                update("courseId", e.target.value);
-              }}
-              required
-              className="input"
-            >
-              <option value="">Välj utbildning...</option>
-              {isAdmin && <option value={PRIVATE_OPTION}>*Privat*</option>}
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <>
+              <select
+                value={form.isPrivate ? PRIVATE_OPTION : form.courseId}
+                onChange={(e) => {
+                  if (e.target.value === PRIVATE_OPTION) {
+                    update("isPrivate", true);
+                    return;
+                  }
+                  update("isPrivate", false);
+                  update("courseId", e.target.value);
+                }}
+                required
+                className="input"
+              >
+                <option value="">Välj utbildning...</option>
+                {isAdmin && <option value={PRIVATE_OPTION}>*Privat*</option>}
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetCourseManagerMessages();
+                    setCourseManagerOpen(true);
+                  }}
+                  className="mt-2 inline-flex items-center rounded-xl border border-surface-border px-3 py-1.5 text-xs font-medium text-brand-500 hover:bg-surface-secondary"
+                >
+                  Redigera kurslistan
+                </button>
+              )}
+            </>
           ) : (
             <input type="text" value={form.customCourse} onChange={(e) => update("customCourse", e.target.value)} placeholder="Ange kursnamn..." className="input" />
           )}
@@ -198,6 +297,136 @@ export default function NewBookingPage() {
           {loading ? "Skapar händelser..." : isAdmin ? "Skapa händelser" : "Skapa bokning"}
         </button>
       </form>
+
+      {courseManagerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-brand-800">Redigera kurslistan</h2>
+                <p className="mt-1 text-sm text-brand-400">Lägg till nya kurser eller redigera befintliga alternativ direkt här.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCourseManagerOpen(false);
+                  setEditingCourseId(null);
+                  setEditingCourseName("");
+                  resetCourseManagerMessages();
+                }}
+                className="rounded-xl border border-surface-border px-3 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+              >
+                Stäng
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
+              <label className="label">Lägg till ny kurs</label>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={newCourseName}
+                  onChange={(e) => setNewCourseName(e.target.value)}
+                  placeholder="Namn på ny kurs"
+                  className="input flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => void addCourse()}
+                  disabled={courseManagerLoading}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  Lägg till
+                </button>
+              </div>
+            </div>
+
+            {courseManagerError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {courseManagerError}
+              </div>
+            )}
+            {courseManagerSuccess && (
+              <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-700">
+                {courseManagerSuccess}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {courses.map((course) => {
+                const isEditing = editingCourseId === course.id;
+
+                return (
+                  <div key={course.id} className="rounded-2xl border border-surface-border bg-white px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex-1">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editingCourseName}
+                          onChange={(e) => setEditingCourseName(e.target.value)}
+                          className="input"
+                        />
+                      ) : (
+                        <p className="font-medium text-brand-700">{course.name}</p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void saveCourse(course.id)}
+                            disabled={courseManagerLoading}
+                            className="btn-primary disabled:opacity-50"
+                          >
+                            Spara
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCourseId(null);
+                              setEditingCourseName("");
+                              resetCourseManagerMessages();
+                            }}
+                            className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                          >
+                            Avbryt
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => startEditingCourse(course)}
+                            className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                          >
+                            Redigera
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteCourse(course)}
+                            disabled={courseManagerLoading}
+                            className="inline-flex items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Radera
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {courses.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-surface-border px-4 py-6 text-sm text-brand-400">
+                  Inga kurser finns ännu.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
