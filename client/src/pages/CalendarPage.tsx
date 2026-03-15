@@ -37,6 +37,7 @@ export default function CalendarPage() {
     const end = info.event.end ? formatTime(info.event.end.toISOString()) : null;
     const timeLabel = start && end ? `${start}-${end}` : null;
     const isMaskedPrivate = info.event.title === "Privat";
+    const displayTitle = isMaskedPrivate ? "+Privat händelse" : info.event.title;
 
     return (
       <div className="flex items-center gap-1 min-w-0">
@@ -47,7 +48,9 @@ export default function CalendarPage() {
             </svg>
           </span>
         )}
-        <span className="truncate">{timeLabel && !isMaskedPrivate ? `${timeLabel} ${info.event.title}` : info.event.title}</span>
+        <span className={`truncate ${isMaskedPrivate ? "font-serif italic text-[11px]" : ""}`}>
+          {timeLabel && !isMaskedPrivate ? `${timeLabel} ${displayTitle}` : displayTitle}
+        </span>
       </div>
     );
   };
