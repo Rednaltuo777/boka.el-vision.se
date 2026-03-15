@@ -276,7 +276,7 @@ export default function UsersPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-brand-700">{u.company || u.name || "Uppdragsgivare"}</p>
-                          <p className="text-xs text-brand-400 mt-1 break-all">{u.logoUrl}</p>
+                          <p className="text-xs text-brand-400 mt-1">Logotypen ar sparad och visas ovan.</p>
                         </div>
                       </div>
                     )}
