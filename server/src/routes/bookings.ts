@@ -76,9 +76,19 @@ function getDistanceWarning(city1: string, city2: string): string | null {
   return null;
 }
 
+function combineDateAndTime(dateValue: string, timeValue: string): Date {
+  return new Date(`${dateValue}T${timeValue}`);
+}
+
+function toTimeLabel(dateValue: Date | null): string | null {
+  if (!dateValue) return null;
+  return dateValue.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}
+
 async function sendBookingConfirmationEmail(booking: {
   id: string;
   date: Date;
+  endDate: Date | null;
   city: string;
   sharedNotes: string;
   customCourse: string | null;
@@ -93,6 +103,9 @@ async function sendBookingConfirmationEmail(booking: {
     month: "long",
     day: "numeric",
   });
+  const startTime = toTimeLabel(booking.date);
+  const endTime = toTimeLabel(booking.endDate);
+  const formattedTime = startTime && endTime ? `${startTime}–${endTime}` : null;
 
   return sendEmail({
     to: [booking.client.email, "thomas@el-vision.se"],
@@ -106,6 +119,10 @@ async function sendBookingConfirmationEmail(booking: {
             <td style="padding: 8px 0; color: #6b7280; width: 160px;">Datum</td>
             <td style="padding: 8px 0; font-weight: 600;">${formattedDate}</td>
           </tr>
+          ${formattedTime ? `<tr>
+            <td style="padding: 8px 0; color: #6b7280;">Tid</td>
+            <td style="padding: 8px 0; font-weight: 600;">${formattedTime}</td>
+          </tr>` : ""}
           <tr>
             <td style="padding: 8px 0; color: #6b7280;">Ort</td>
             <td style="padding: 8px 0; font-weight: 600;">${booking.city}</td>
@@ -135,6 +152,7 @@ async function sendBookingConfirmationEmail(booking: {
     text: [
       "En ny bokning har registrerats i El-Visions bokningssystem.",
       `Datum: ${formattedDate}`,
+      formattedTime ? `Tid: ${formattedTime}` : "",
       `Ort: ${booking.city}`,
       `Utbildning: ${courseName}`,
       `Bokad av: ${booking.client.name || booking.client.email}`,
@@ -147,13 +165,24 @@ async function sendBookingConfirmationEmail(booking: {
 
 // Create a booking
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
-  const { date, endDate, city, courseId, customCourse, sharedNotes } = req.body;
-  if (!date || !city || !courseId) {
-    res.status(400).json({ error: "Datum, ort och kurs krävs" });
+  const { date, startTime, endTime, city, courseId, customCourse, sharedNotes } = req.body;
+  if (!date || !startTime || !endTime || !city || !courseId) {
+    res.status(400).json({ error: "Datum, starttid, sluttid, ort och kurs krävs" });
     return;
   }
 
-  const bookingDate = new Date(date);
+  const bookingDate = combineDateAndTime(date, startTime);
+  const bookingEndDate = combineDateAndTime(date, endTime);
+
+  if (Number.isNaN(bookingDate.getTime()) || Number.isNaN(bookingEndDate.getTime())) {
+    res.status(400).json({ error: "Ogiltigt datum eller tid" });
+    return;
+  }
+
+  if (bookingEndDate <= bookingDate) {
+    res.status(400).json({ error: "Sluttiden måste vara senare än starttiden" });
+    return;
+  }
 
   // Check for double booking on the same date
   const existingOnDate = await prisma.booking.findFirst({
@@ -195,7 +224,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   const booking = await prisma.booking.create({
     data: {
       date: bookingDate,
-      endDate: endDate ? new Date(endDate) : null,
+      endDate: bookingEndDate,
       city,
       courseId,
       customCourse: customCourse || null,
@@ -300,12 +329,23 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   }
 
   const { date, endDate, city, courseId, customCourse, sharedNotes, privateNotes } = req.body;
-
-  const nextDate = date ? new Date(date) : booking.date;
+  const { startTime, endTime } = req.body;
+  const bookingDatePart = booking.date.toISOString().split("T")[0];
+  const nextDate = (date || startTime)
+    ? combineDateAndTime(date || bookingDatePart, startTime || toTimeLabel(booking.date) || "08:00")
+    : booking.date;
+  const nextEndDate = (date || startTime || endTime)
+    ? combineDateAndTime(date || bookingDatePart, endTime || toTimeLabel(booking.endDate) || toTimeLabel(booking.date) || "16:00")
+    : booking.endDate;
   const nextCity = city || booking.city;
 
-  if (Number.isNaN(nextDate.getTime())) {
-    res.status(400).json({ error: "Ogiltigt datum" });
+  if (Number.isNaN(nextDate.getTime()) || (nextEndDate && Number.isNaN(nextEndDate.getTime()))) {
+    res.status(400).json({ error: "Ogiltigt datum eller tid" });
+    return;
+  }
+
+  if (nextEndDate && nextEndDate <= nextDate) {
+    res.status(400).json({ error: "Sluttiden måste vara senare än starttiden" });
     return;
   }
 
@@ -355,8 +395,8 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   }
 
   const data: Record<string, unknown> = {};
-  if (date) data.date = new Date(date);
-  if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
+  if (date || startTime) data.date = nextDate;
+  if (date || startTime || endTime || endDate !== undefined) data.endDate = nextEndDate;
   if (city) data.city = city;
   if (courseId) data.courseId = courseId;
   if (customCourse !== undefined) data.customCourse = customCourse || null;

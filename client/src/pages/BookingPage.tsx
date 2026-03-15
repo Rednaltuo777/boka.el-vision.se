@@ -8,6 +8,8 @@ type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
 
 type BookingFormState = {
   date: string;
+  startTime: string;
+  endTime: string;
   city: string;
   courseId: string;
   customCourse: string;
@@ -15,13 +17,34 @@ type BookingFormState = {
   privateNotes: string;
 };
 
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
 function toDateInput(value: string) {
-  return value.split("T")[0] || value;
+  const date = new Date(value);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function toTimeInput(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (date.getHours() === 0 && date.getMinutes() === 0) return "";
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatTimeRange(dateValue: string, endDateValue: string | null) {
+  const start = toTimeInput(dateValue);
+  const end = toTimeInput(endDateValue);
+  if (!start || !end) return null;
+  return `${start}–${end}`;
 }
 
 function toFormState(booking: Booking): BookingFormState {
   return {
     date: toDateInput(booking.date),
+    startTime: toTimeInput(booking.date) || "08:00",
+    endTime: toTimeInput(booking.endDate) || "16:00",
     city: booking.city,
     courseId: booking.courseId,
     customCourse: booking.customCourse || "",
@@ -43,6 +66,8 @@ export default function BookingPage() {
   const [chatInput, setChatInput] = useState("");
   const [form, setForm] = useState<BookingFormState>({
     date: "",
+    startTime: "08:00",
+    endTime: "16:00",
     city: "",
     courseId: "",
     customCourse: "",
@@ -116,6 +141,8 @@ export default function BookingPage() {
     try {
       const updated = await api.put<BookingUpdateResponse>(`/bookings/${id}`, {
         date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
         city: form.city,
         courseId: useCustomCourse ? booking?.courseId : form.courseId,
         customCourse: useCustomCourse ? form.customCourse : "",
@@ -179,6 +206,7 @@ export default function BookingPage() {
             <h1 className="text-2xl font-bold text-brand-800">{booking.customCourse || booking.course.name}</h1>
             <p className="text-brand-400 text-sm mt-1">
               {new Date(booking.date).toLocaleDateString("sv-SE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              {formatTimeRange(booking.date, booking.endDate) ? ` · ${formatTimeRange(booking.date, booking.endDate)}` : ""}
               {" · "}{booking.city}
             </p>
           </div>
@@ -239,6 +267,17 @@ export default function BookingPage() {
                   <div>
                     <label className="label">Ort</label>
                     <input type="text" value={form.city} onChange={(e) => updateForm("city", e.target.value)} required className="input" placeholder="T.ex. Stockholm, Göteborg..." />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Starttid</label>
+                    <input type="time" value={form.startTime} onChange={(e) => updateForm("startTime", e.target.value)} required className="input" />
+                  </div>
+                  <div>
+                    <label className="label">Sluttid</label>
+                    <input type="time" value={form.endTime} onChange={(e) => updateForm("endTime", e.target.value)} required className="input" />
                   </div>
                 </div>
 
@@ -313,6 +352,10 @@ export default function BookingPage() {
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Datum</p>
                   <p className="font-medium text-brand-700">{new Date(booking.date).toLocaleDateString("sv-SE")}</p>
+                </div>
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Tid</p>
+                  <p className="font-medium text-brand-700">{formatTimeRange(booking.date, booking.endDate) || "Ej angiven"}</p>
                 </div>
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Ort</p>

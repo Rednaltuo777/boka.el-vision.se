@@ -14,6 +14,8 @@ export default function NewBookingPage() {
 
   const [form, setForm] = useState({
     date: searchParams.get("date") || "",
+    startTime: "08:00",
+    endTime: "16:00",
     city: "",
     courseId: "",
     customCourse: "",
@@ -91,6 +93,17 @@ export default function NewBookingPage() {
           <div>
             <label className="label">Ort</label>
             <input type="text" value={form.city} onChange={(e) => update("city", e.target.value)} required placeholder="T.ex. Stockholm, Göteborg..." className="input" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Starttid</label>
+            <input type="time" value={form.startTime} onChange={(e) => update("startTime", e.target.value)} required className="input" />
+          </div>
+          <div>
+            <label className="label">Sluttid</label>
+            <input type="time" value={form.endTime} onChange={(e) => update("endTime", e.target.value)} required className="input" />
           </div>
         </div>
 

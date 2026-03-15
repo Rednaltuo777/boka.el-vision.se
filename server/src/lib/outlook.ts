@@ -175,6 +175,7 @@ interface BookingData {
 
 function buildCalendarEvent(booking: BookingData) {
   const startDate = new Date(booking.date);
+  const hasExplicitTime = startDate.getHours() !== 0 || startDate.getMinutes() !== 0 || startDate.getSeconds() !== 0;
   let endDate: Date;
   if (booking.endDate) {
     endDate = new Date(booking.endDate);
@@ -195,14 +196,14 @@ function buildCalendarEvent(booking: BookingData) {
       content: booking.sharedNotes || "",
     },
     start: {
-      dateTime: startDate.toISOString().split("T")[0],
+      dateTime: hasExplicitTime ? startDate.toISOString() : startDate.toISOString().split("T")[0],
       timeZone: "Europe/Stockholm",
     },
     end: {
-      dateTime: endDate.toISOString().split("T")[0],
+      dateTime: hasExplicitTime ? endDate.toISOString() : endDate.toISOString().split("T")[0],
       timeZone: "Europe/Stockholm",
     },
-    isAllDay: true,
+    isAllDay: !hasExplicitTime,
     location: {
       displayName: booking.city,
     },

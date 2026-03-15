@@ -12,6 +12,8 @@ export default function CalendarPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const navigate = useNavigate();
 
+  const formatTime = (value: string) => new Date(value).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+
   useEffect(() => {
     api.get<Booking[]>("/bookings").then(setBookings);
   }, []);
@@ -31,6 +33,9 @@ export default function CalendarPage() {
 
   const renderEventContent = (info: EventContentArg) => {
     const hasUnread = Boolean(info.event.extendedProps.hasUnread);
+    const start = info.event.start ? formatTime(info.event.start.toISOString()) : null;
+    const end = info.event.end ? formatTime(info.event.end.toISOString()) : null;
+    const timeLabel = start && end ? `${start}-${end}` : null;
 
     return (
       <div className="flex items-center gap-1 min-w-0">
@@ -41,7 +46,7 @@ export default function CalendarPage() {
             </svg>
           </span>
         )}
-        <span className="truncate">{info.event.title}</span>
+        <span className="truncate">{timeLabel ? `${timeLabel} ${info.event.title}` : info.event.title}</span>
       </div>
     );
   };
