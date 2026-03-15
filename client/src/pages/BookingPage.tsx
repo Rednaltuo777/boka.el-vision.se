@@ -249,18 +249,18 @@ export default function BookingPage() {
               {" · "}{booking.city}
             </p>
           </div>
-          <div className="flex items-start gap-3 self-start">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3 self-start w-full sm:w-auto">
             {booking.client.logoUrl && (
               <div className="h-12 w-12 rounded-xl border border-surface-border bg-white overflow-hidden shrink-0">
                 <img src={booking.client.logoUrl} alt={booking.client.company || booking.client.name || "Logotyp"} className="h-full w-full object-contain" />
               </div>
             )}
-            <span className="badge badge-info self-start">
+            <span className="badge badge-info self-start max-w-full">
               {booking.client.company || booking.client.name}
             </span>
             {isAdmin && !editMode && (
-              <div className="flex flex-col gap-2 self-start">
-                <button onClick={() => setEditMode(true)} className="btn-primary">
+              <div className="flex flex-col gap-2 self-start w-full sm:w-auto">
+                <button onClick={() => setEditMode(true)} className="btn-primary w-full sm:w-auto">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
                   </svg>
@@ -270,7 +270,7 @@ export default function BookingPage() {
                   type="button"
                   onClick={() => void deleteBooking()}
                   disabled={deleting}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.327L4.772 5.79m14.456 0A48.108 48.108 0 0 0 15.75 5.25m3.478.54a48.11 48.11 0 0 1-7.5 0m7.5 0V4.875c0-1.026-.79-1.891-1.816-1.966A52.816 52.816 0 0 0 12 2.25c-1.159 0-2.312.04-3.462.118-1.026.075-1.816.94-1.816 1.966v.915m7.5 0a48.667 48.667 0 0 1-7.5 0" />
@@ -430,7 +430,7 @@ export default function BookingPage() {
                 </div>
               </form>
             ) : (
-              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Datum</p>
                   <p className="font-medium text-brand-700">{new Date(booking.date).toLocaleDateString("sv-SE")}</p>
@@ -457,7 +457,7 @@ export default function BookingPage() {
                   <p className="text-brand-400 text-xs mb-0.5">Företag</p>
                   <p className="font-medium text-brand-700">{booking.client.company || "–"}</p>
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <p className="text-brand-400 text-xs mb-0.5">Bokad av</p>
                   <p className="font-medium text-brand-700">{booking.client.name} · {booking.client.email}</p>
                 </div>
@@ -500,8 +500,8 @@ export default function BookingPage() {
             )}
 
             {canEditBooking ? (
-              <div className="flex items-center gap-3 mt-4">
-                <button onClick={saveNotes} disabled={saving} className="btn-primary disabled:opacity-50">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
+                <button onClick={saveNotes} disabled={saving} className="btn-primary w-full sm:w-auto disabled:opacity-50">
                   {saving ? "Sparar..." : "Spara anteckningar"}
                 </button>
                 {saved && (
@@ -521,7 +521,7 @@ export default function BookingPage() {
 
         {/* Right column: Chat */}
         <div ref={chatSectionRef} className="lg:col-span-1" id="chat">
-          <div className="card flex flex-col h-[500px]">
+          <div className="card flex flex-col h-[420px] sm:h-[500px]">
             <div className="p-4 border-b border-surface-border">
               <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -572,7 +572,7 @@ export default function BookingPage() {
                   placeholder="Skriv meddelande..."
                   className="input text-sm py-2"
                 />
-                <button type="submit" className="btn-primary px-3 py-2 shrink-0">
+                <button type="submit" className="btn-primary px-3 py-2 shrink-0 min-w-11">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                   </svg>

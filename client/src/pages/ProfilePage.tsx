@@ -43,7 +43,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Avatar + info */}
-      <div className="card p-6 flex items-center gap-4">
+      <div className="card p-4 sm:p-6 flex items-center gap-4">
         <div className="w-14 h-14 rounded-2xl bg-brand-700 flex items-center justify-center text-xl font-bold text-white shrink-0">
           {profile.name?.[0]?.toUpperCase() || "?"}
         </div>
@@ -57,7 +57,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Edit form */}
-      <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="card p-4 sm:p-6 space-y-4">
         <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide">Kontaktuppgifter</h2>
 
         <div>
@@ -68,7 +68,7 @@ export default function ProfilePage() {
           <label className="label">Namn</label>
           <input type="text" value={form.name} onChange={(e) => update("name", e.target.value)} className="input" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="label">Företag</label>
             <input type="text" value={form.company} onChange={(e) => update("company", e.target.value)} className="input" />
@@ -83,8 +83,8 @@ export default function ProfilePage() {
           <input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} className="input" />
         </div>
 
-        <div className="flex items-center gap-3 pt-2">
-          <button type="submit" className="btn-primary">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+          <button type="submit" className="btn-primary w-full sm:w-auto">
             Spara ändringar
           </button>
           {saved && (

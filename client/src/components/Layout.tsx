@@ -18,7 +18,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex bg-surface-secondary">
+    <div className="min-h-screen flex bg-surface-secondary overflow-x-clip">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -26,7 +26,7 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-brand-900 text-white flex flex-col
+        fixed inset-y-0 left-0 z-50 w-[86vw] max-w-64 bg-brand-900 text-white flex flex-col
         transform transition-transform duration-200 ease-out
         lg:translate-x-0 lg:static lg:z-auto
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
@@ -119,7 +119,7 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 px-3 py-4 sm:px-4 lg:px-8 lg:py-8 max-w-7xl w-full mx-auto">
           <Outlet />
         </main>
       </div>

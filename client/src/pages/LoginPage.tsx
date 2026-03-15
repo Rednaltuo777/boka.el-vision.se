@@ -36,7 +36,7 @@ export default function LoginPage() {
       </div>
 
       {/* Right panel - form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-surface-secondary">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-surface-secondary">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden mb-10 flex justify-center">
@@ -45,7 +45,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
             <h1 className="text-2xl font-bold text-brand-800">Välkommen tillbaka</h1>
             <p className="text-brand-400 text-sm mt-1">Logga in för att hantera dina bokningar</p>
           </div>

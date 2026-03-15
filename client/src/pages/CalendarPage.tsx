@@ -42,6 +42,7 @@ export default function CalendarPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<BlockingPeriodDraft | null>(null);
   const [periodError, setPeriodError] = useState("");
   const [savingPeriod, setSavingPeriod] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
 
   const formatTime = (value: string) => new Date(value).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
@@ -58,6 +59,16 @@ export default function CalendarPage() {
 
   useEffect(() => {
     loadCalendarData().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const syncViewport = () => setIsMobile(mediaQuery.matches);
+
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+
+    return () => mediaQuery.removeEventListener("change", syncViewport);
   }, []);
 
   const unreadChats = bookings
@@ -193,8 +204,8 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar */}
-      <div className="card p-5">
-        <div className="flex items-start justify-between gap-4">
+      <div className="card p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-brand-800">Chattindikering</h2>
             <p className="text-sm text-brand-400 mt-1">
@@ -239,8 +250,10 @@ export default function CalendarPage() {
         ) : null}
       </div>
 
-      <div className="card p-5">
-        <FullCalendar
+      <div className="card p-3 sm:p-5">
+        <div className="overflow-x-auto">
+          <div className="min-w-[320px]">
+            <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{
@@ -279,13 +292,15 @@ export default function CalendarPage() {
           }}
           dateClick={(info) => navigate(`/bookings/new?date=${info.dateStr}`)}
           height="auto"
-          dayMaxEvents={3}
+          dayMaxEvents={isMobile ? 2 : 3}
           buttonText={{
             today: "Idag",
             month: "Månad",
             week: "Vecka",
           }}
         />
+          </div>
+        </div>
       </div>
 
       {selectedPeriod && (

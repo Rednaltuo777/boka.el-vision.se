@@ -5,6 +5,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-surface-secondary text-brand-700 font-sans antialiased;
   }
@@ -98,5 +102,44 @@
   font-size: 0.8125rem !important;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+@media (max-width: 640px) {
+  .fc .fc-toolbar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .fc .fc-toolbar-chunk {
+    display: flex !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1.1rem !important;
+    text-align: center;
+  }
+
+  .fc .fc-button {
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .fc .fc-daygrid-day-frame {
+    min-height: 5.5rem;
+  }
+
+  .fc .fc-daygrid-event {
+    font-size: 0.6875rem !important;
+    padding: 2px 4px !important;
+  }
+
+  .fc .fc-col-header-cell-cushion {
+    font-size: 0.7rem !important;
+  }
 }
 

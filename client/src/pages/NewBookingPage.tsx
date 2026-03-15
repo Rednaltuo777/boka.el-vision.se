@@ -171,7 +171,7 @@ export default function NewBookingPage() {
         <p className="text-sm text-brand-400 mt-1">Fyll i uppgifterna för att boka en utbildning</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="card p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="card p-4 sm:p-6 space-y-5">
         {error && (
           <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm">
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -268,7 +268,7 @@ export default function NewBookingPage() {
                     resetCourseManagerMessages();
                     setCourseManagerOpen(true);
                   }}
-                  className="mt-2 inline-flex items-center rounded-xl border border-surface-border px-3 py-1.5 text-xs font-medium text-brand-500 hover:bg-surface-secondary"
+                  className="mt-2 inline-flex w-full sm:w-auto items-center justify-center rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-brand-500 hover:bg-surface-secondary"
                 >
                   Redigera kurslistan
                 </button>
@@ -300,8 +300,8 @@ export default function NewBookingPage() {
 
       {courseManagerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-4 sm:p-6 shadow-2xl space-y-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-brand-800">Redigera kurslistan</h2>
                 <p className="mt-1 text-sm text-brand-400">Lägg till nya kurser eller redigera befintliga alternativ direkt här.</p>
@@ -334,7 +334,7 @@ export default function NewBookingPage() {
                   type="button"
                   onClick={() => void addCourse()}
                   disabled={courseManagerLoading}
-                  className="btn-primary disabled:opacity-50"
+                  className="btn-primary w-full sm:w-auto disabled:opacity-50"
                 >
                   Lägg till
                 </button>
@@ -371,14 +371,14 @@ export default function NewBookingPage() {
                       )}
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
                       {isEditing ? (
                         <>
                           <button
                             type="button"
                             onClick={() => void saveCourse(course.id)}
                             disabled={courseManagerLoading}
-                            className="btn-primary disabled:opacity-50"
+                            className="btn-primary w-full sm:w-auto disabled:opacity-50"
                           >
                             Spara
                           </button>
@@ -389,7 +389,7 @@ export default function NewBookingPage() {
                               setEditingCourseName("");
                               resetCourseManagerMessages();
                             }}
-                            className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                            className="inline-flex items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                           >
                             Avbryt
                           </button>
@@ -399,7 +399,7 @@ export default function NewBookingPage() {
                           <button
                             type="button"
                             onClick={() => startEditingCourse(course)}
-                            className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                            className="inline-flex items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                           >
                             Redigera
                           </button>
@@ -407,7 +407,7 @@ export default function NewBookingPage() {
                             type="button"
                             onClick={() => void deleteCourse(course)}
                             disabled={courseManagerLoading}
-                            className="inline-flex items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            className="inline-flex items-center justify-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                           >
                             Radera
                           </button>

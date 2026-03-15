@@ -281,7 +281,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
+          <div className="p-4 sm:p-6 space-y-6">
             <form onSubmit={createCourse} className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
@@ -290,7 +290,7 @@ export default function SettingsPage() {
                 placeholder="Namn på ny kurs"
                 className="input flex-1"
               />
-              <button type="submit" disabled={courseActionLoading} className="btn-primary disabled:opacity-50">
+                <button type="submit" disabled={courseActionLoading} className="btn-primary w-full sm:w-auto disabled:opacity-50">
                 Lägg till kurs
               </button>
             </form>
@@ -334,14 +334,14 @@ export default function SettingsPage() {
                         )}
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
                         {isEditing ? (
                           <>
                             <button
                               type="button"
                               onClick={() => void saveCourse(course.id)}
                               disabled={courseActionLoading}
-                              className="btn-primary disabled:opacity-50"
+                              className="btn-primary w-full sm:w-auto disabled:opacity-50"
                             >
                               Spara
                             </button>
@@ -352,7 +352,7 @@ export default function SettingsPage() {
                                 setEditingName("");
                                 resetCourseMessages();
                               }}
-                              className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                              className="inline-flex items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                             >
                               Avbryt
                             </button>
@@ -362,7 +362,7 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               onClick={() => startEditingCourse(course)}
-                              className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                              className="inline-flex items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                             >
                               Redigera
                             </button>
@@ -370,7 +370,7 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => void deleteCourse(course)}
                               disabled={courseActionLoading}
-                              className="inline-flex items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              className="inline-flex items-center justify-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                             >
                               Radera
                             </button>

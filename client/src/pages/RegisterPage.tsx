@@ -49,7 +49,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right panel - form */}
-      <div className="flex-1 flex items-center justify-center p-6 bg-surface-secondary">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-surface-secondary">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-8 flex justify-center">
             <div className="bg-brand-900 rounded-2xl p-4">
@@ -86,7 +86,7 @@ export default function RegisterPage() {
               <label className="label">Namn</label>
               <input type="text" value={form.name} onChange={(e) => update("name", e.target.value)} required placeholder="Ditt fullständiga namn" className="input" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="label">Företag</label>
                 <input type="text" value={form.company} onChange={(e) => update("company", e.target.value)} placeholder="Företagsnamn" className="input" />

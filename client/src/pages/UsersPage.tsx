@@ -145,7 +145,7 @@ export default function UsersPage() {
       </div>
 
       {/* Invite Form */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Bjud in ny uppdragsgivare</h2>
         <form onSubmit={sendInvitation} className="flex flex-col sm:flex-row gap-3">
           <input
@@ -182,14 +182,14 @@ export default function UsersPage() {
               <p className="p-5 text-brand-300 text-sm text-center">Inga inbjudningar ännu</p>
             ) : (
               invitations.map((inv) => (
-                <div key={inv.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-brand-700">{inv.email}</p>
+                <div key={inv.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-brand-700 break-all">{inv.email}</p>
                     <p className="text-xs text-brand-300 mt-0.5">
                       Utgår {new Date(inv.expiresAt).toLocaleDateString("sv-SE")}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
                     <span className={`badge ${inv.used ? "badge-success" : "badge-warning"}`}>
                       {inv.used ? "Använd" : "Väntande"}
                     </span>
@@ -221,7 +221,7 @@ export default function UsersPage() {
           <div className="divide-y divide-surface-border">
             {users.map((u) => (
               <div key={u.id} className="p-4 space-y-3">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-surface-border overflow-hidden flex items-center justify-center text-sm font-bold text-brand-600 shrink-0 shadow-sm">
                     {u.logoUrl && !brokenLogoUserIds.includes(u.id) ? (
                       <img
@@ -235,7 +235,7 @@ export default function UsersPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium text-brand-700 truncate">{u.name || "–"}</p>
                       <span className={`badge ${u.role === "admin" ? "badge-admin" : "badge-info"}`}>
                         {u.role === "admin" ? "Admin" : "Uppdragsgivare"}
@@ -252,7 +252,7 @@ export default function UsersPage() {
                     <button
                       type="button"
                       onClick={() => startEditingLogo(u)}
-                      className="inline-flex items-center rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-brand-500 hover:bg-surface-secondary"
+                      className="inline-flex items-center justify-center rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-brand-500 hover:bg-surface-secondary self-start sm:self-auto"
                     >
                       Logotyp
                     </button>
@@ -265,7 +265,7 @@ export default function UsersPage() {
                     {brokenLogoUserIds.includes(u.id) ? (
                       <p className="text-sm text-amber-700">Logotypen är sparad men kunde inte visas. Kontrollera bildlänken eller prova att ladda upp filen igen.</p>
                     ) : (
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <div className="h-20 w-20 rounded-2xl border border-surface-border bg-white overflow-hidden flex items-center justify-center shrink-0">
                           <img
                             src={u.logoUrl || ""}
@@ -287,7 +287,7 @@ export default function UsersPage() {
                   <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
                     <div>
                       <label className="label">Förhandsvisning</label>
-                      <div className="mt-2 flex items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
+                      <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
                         <div className="h-20 w-20 rounded-2xl border border-surface-border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
                           {((editingUserId === u.id ? (previewLogoUrl || logoUrl) : u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
                             <img
@@ -338,12 +338,12 @@ export default function UsersPage() {
                         {error || message}
                       </div>
                     )}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                       <button
                         type="button"
                         onClick={() => void saveLogo(u.id)}
                         disabled={savingLogo}
-                        className="btn-primary disabled:opacity-50"
+                        className="btn-primary w-full sm:w-auto disabled:opacity-50"
                       >
                         {savingLogo ? "Sparar..." : "Spara logotyp"}
                       </button>
@@ -354,7 +354,7 @@ export default function UsersPage() {
                           setLogoUrl("");
                           setPreviewLogoUrl("");
                         }}
-                        className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                        className="inline-flex items-center justify-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                       >
                         Avbryt
                       </button>
