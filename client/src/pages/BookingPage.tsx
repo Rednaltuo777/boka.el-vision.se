@@ -91,6 +91,13 @@ export default function BookingPage() {
   const canEditBooking = isAdmin || booking?.clientId === user?.id;
 
   useEffect(() => {
+    const locationState = location.state as { distanceWarning?: string } | null;
+    if (locationState?.distanceWarning) {
+      setWarning(locationState.distanceWarning);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     if (!id) return;
     api.get<Booking>(`/bookings/${id}`).then((b) => {
       setBooking(b);

@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
-import { getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
+import { getOpenRouteServiceDistanceKm, getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
 import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
@@ -123,7 +123,8 @@ function getEstimatedTravelMinutes(city1: string, city2: string): number {
 
   const km = getCityDistanceKm(city1, city2);
   if (km === null) {
-    return 0;
+    // Unknown cities should not silently bypass same-day travel validation.
+    return 31;
   }
 
   return Math.ceil((km / 80) * 60) + 30;
@@ -150,8 +151,17 @@ async function getRequiredTravelMinutes(city1: string, city2: string): Promise<n
   return getEstimatedTravelMinutes(city1, city2);
 }
 
-function getDistanceWarning(city1: string, city2: string): string | null {
-  const km = getCityDistanceKm(city1, city2);
+async function getDistanceWarning(city1: string, city2: string): Promise<string | null> {
+  let km = getCityDistanceKm(city1, city2);
+
+  if (km === null) {
+    try {
+      km = await getOpenRouteServiceDistanceKm(city1, city2);
+    } catch (error) {
+      console.error("OpenRouteService distance lookup failed:", error);
+    }
+  }
+
   if (km === null) return null;
   // 30 Swedish miles = 300 km
   if (km > 300) {
@@ -416,7 +426,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       });
 
       for (const adjacentBooking of adjacentBookings) {
-        const warning = getDistanceWarning(city, adjacentBooking.city);
+        const warning = await getDistanceWarning(city, adjacentBooking.city);
         if (warning) {
           distanceWarning = warning;
           break;
@@ -599,7 +609,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
   let distanceWarning: string | null = null;
   for (const adjacentBooking of adjacentBookings) {
-    const warning = getDistanceWarning(nextCity, adjacentBooking.city);
+    const warning = await getDistanceWarning(nextCity, adjacentBooking.city);
     if (warning) {
       distanceWarning = warning;
       break;

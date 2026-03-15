@@ -147,7 +147,7 @@ export default function NewBookingPage() {
 
       if (res.distanceWarning) {
         setWarning(res.distanceWarning);
-        setTimeout(() => navigate(`/bookings/${res.booking.id}`), 3000);
+        setTimeout(() => navigate(`/bookings/${res.booking.id}`, { state: { distanceWarning: res.distanceWarning } }), 3000);
       } else {
         navigate(`/bookings/${res.booking.id}`);
       }
