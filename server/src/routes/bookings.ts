@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
+import { getGoogleMapsTravelMinutes } from "../lib/googleMaps";
 import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
@@ -132,6 +133,23 @@ function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date): bool
   return startA < endB && startB < endA;
 }
 
+async function getRequiredTravelMinutes(city1: string, city2: string): Promise<number> {
+  if (normalizeCity(city1) === normalizeCity(city2)) {
+    return 0;
+  }
+
+  try {
+    const googleTravelMinutes = await getGoogleMapsTravelMinutes(city1, city2);
+    if (googleTravelMinutes !== null) {
+      return googleTravelMinutes;
+    }
+  } catch (error) {
+    console.error("Google Maps travel time lookup failed:", error);
+  }
+
+  return getEstimatedTravelMinutes(city1, city2);
+}
+
 function getDistanceWarning(city1: string, city2: string): string | null {
   const km = getCityDistanceKm(city1, city2);
   if (km === null) return null;
@@ -229,7 +247,7 @@ async function findSameDaySchedulingConflict(
       return `Tiden krockar med en annan bokning samma dag (${toTimeLabel(existingBooking.date) || "okänd tid"}-${toTimeLabel(existingEndDate) || "okänd tid"}).`;
     }
 
-    const requiredTravelMinutes = getEstimatedTravelMinutes(city, existingBooking.city);
+    const requiredTravelMinutes = await getRequiredTravelMinutes(city, existingBooking.city);
     if (requiredTravelMinutes === 0) {
       continue;
     }
@@ -243,6 +261,10 @@ async function findSameDaySchedulingConflict(
 
     if (travelGapMs >= 0 && travelGapMs < requiredTravelMs) {
       return `Det finns inte tillrackligt med restid mellan ${existingBooking.city} och ${city} samma dag.`;
+    }
+
+    if (requiredTravelMinutes > 30) {
+      return `Restiden mellan ${existingBooking.city} och ${city} ar mer an 30 minuter, sa dessa bokningar kan inte ligga samma dag.`;
     }
   }
 
