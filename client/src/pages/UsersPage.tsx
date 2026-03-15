@@ -212,9 +212,9 @@ export default function UsersPage() {
             {users.map((u) => (
               <div key={u.id} className="p-4 space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-brand-100 border border-surface-border overflow-hidden flex items-center justify-center text-sm font-bold text-brand-600 shrink-0">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-surface-border overflow-hidden flex items-center justify-center text-sm font-bold text-brand-600 shrink-0 shadow-sm">
                     {u.logoUrl ? (
-                      <img src={u.logoUrl} alt={u.company || u.name || "Logotyp"} className="h-full w-full object-contain bg-white" />
+                      <img src={u.logoUrl} alt={u.company || u.name || "Logotyp"} className="h-full w-full object-contain bg-white p-1.5" />
                     ) : (
                       u.name?.[0]?.toUpperCase() || "?"
                     )}
@@ -225,6 +225,11 @@ export default function UsersPage() {
                       <span className={`badge ${u.role === "admin" ? "badge-admin" : "badge-info"}`}>
                         {u.role === "admin" ? "Admin" : "Uppdragsgivare"}
                       </span>
+                      {u.logoUrl && (
+                        <span className="inline-flex items-center rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-medium text-accent-700">
+                          Logga sparad
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-brand-400 truncate">{u.company ? `${u.company} · ` : ""}{u.email}</p>
                   </div>
@@ -241,6 +246,27 @@ export default function UsersPage() {
 
                 {editingUserId === u.id && u.role !== "admin" && (
                   <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
+                    <div>
+                      <label className="label">Förhandsvisning</label>
+                      <div className="mt-2 flex items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
+                        <div className="h-20 w-20 rounded-2xl border border-surface-border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                          {logoUrl || u.logoUrl ? (
+                            <img
+                              src={logoUrl || u.logoUrl || ""}
+                              alt={u.company || u.name || "Logotyp"}
+                              className="h-full w-full object-contain bg-white p-2"
+                            />
+                          ) : (
+                            <span className="text-xs text-brand-300">Ingen logga</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-brand-700">{u.company || u.name || "Uppdragsgivare"}</p>
+                          <p className="text-xs text-brand-400 mt-1">Här ser du direkt om logotypen finns sparad och hur den visas i systemet.</p>
+                        </div>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="label">Ladda upp logotyp</label>
                       <input
@@ -266,7 +292,7 @@ export default function UsersPage() {
                       placeholder="https://.../logo.png"
                       className="input"
                     />
-                    <p className="text-xs text-brand-400">Ange en publik bildlänk till uppdragsgivarens logotyp.</p>
+                    <p className="text-xs text-brand-400">Ange en publik bildlänk till uppdragsgivarens logotyp. Förhandsvisningen uppdateras direkt.</p>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
