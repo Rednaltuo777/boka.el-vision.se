@@ -11,6 +11,7 @@ type BookingFormState = {
   startTime: string;
   endTime: string;
   city: string;
+  isPrivate: boolean;
   courseId: string;
   customCourse: string;
   sharedNotes: string;
@@ -46,6 +47,7 @@ function toFormState(booking: Booking): BookingFormState {
     startTime: toTimeInput(booking.date) || "08:00",
     endTime: toTimeInput(booking.endDate) || "16:00",
     city: booking.city,
+    isPrivate: Boolean(booking.isPrivate),
     courseId: booking.courseId,
     customCourse: booking.customCourse || "",
     sharedNotes: booking.sharedNotes,
@@ -69,6 +71,7 @@ export default function BookingPage() {
     startTime: "08:00",
     endTime: "16:00",
     city: "",
+    isPrivate: false,
     courseId: "",
     customCourse: "",
     sharedNotes: "",
@@ -96,8 +99,12 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!id) return;
+    if (booking?.canAccessChat === false) {
+      setMessages([]);
+      return;
+    }
     api.get<ChatMessage[]>(`/chat/${id}`).then(setMessages).catch(() => setMessages([]));
-  }, [id]);
+  }, [id, booking?.canAccessChat]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -144,6 +151,7 @@ export default function BookingPage() {
         startTime: form.startTime,
         endTime: form.endTime,
         city: form.city,
+        isPrivate: form.isPrivate,
         courseId: useCustomCourse ? booking?.courseId : form.courseId,
         customCourse: useCustomCourse ? form.customCourse : "",
         sharedNotes: form.sharedNotes,
@@ -203,7 +211,7 @@ export default function BookingPage() {
         </button>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-brand-800">{booking.customCourse || booking.course.name}</h1>
+            <h1 className="text-2xl font-bold text-brand-800">{booking.displayTitle || booking.customCourse || booking.course.name}</h1>
             <p className="text-brand-400 text-sm mt-1">
               {new Date(booking.date).toLocaleDateString("sv-SE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
               {formatTimeRange(booking.date, booking.endDate) ? ` · ${formatTimeRange(booking.date, booking.endDate)}` : ""}
@@ -280,6 +288,16 @@ export default function BookingPage() {
                     <input type="time" value={form.endTime} onChange={(e) => updateForm("endTime", e.target.value)} required className="input" />
                   </div>
                 </div>
+
+                <label className="flex items-center gap-2 text-sm text-brand-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.isPrivate}
+                    onChange={(e) => setForm((current) => ({ ...current, isPrivate: e.target.checked }))}
+                    className="rounded border-brand-300 text-brand-700 focus:ring-brand-400"
+                  />
+                  Privat adminhändelse
+                </label>
 
                 <div>
                   <label className="label">Utbildning</label>
@@ -361,6 +379,12 @@ export default function BookingPage() {
                   <p className="text-brand-400 text-xs mb-0.5">Ort</p>
                   <p className="font-medium text-brand-700">{booking.city}</p>
                 </div>
+                {booking.isPrivate && isAdmin && (
+                  <div>
+                    <p className="text-brand-400 text-xs mb-0.5">Synlighet</p>
+                    <p className="font-medium text-brand-700">Privat för vanliga användare</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Utbildning</p>
                   <p className="font-medium text-brand-700">{booking.customCourse || booking.course.name}</p>
@@ -475,20 +499,24 @@ export default function BookingPage() {
               <div ref={chatEndRef} />
             </div>
 
-            <form onSubmit={sendMessage} className="p-3 border-t border-surface-border flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Skriv meddelande..."
-                className="input text-sm py-2"
-              />
-              <button type="submit" className="btn-primary px-3 py-2 shrink-0">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                </svg>
-              </button>
-            </form>
+            {booking.canAccessChat !== false ? (
+              <form onSubmit={sendMessage} className="p-3 border-t border-surface-border flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Skriv meddelande..."
+                  className="input text-sm py-2"
+                />
+                <button type="submit" className="btn-primary px-3 py-2 shrink-0">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                  </svg>
+                </button>
+              </form>
+            ) : (
+              <div className="p-3 border-t border-surface-border text-sm text-brand-300">Chatt är dold för privata adminhändelser.</div>
+            )}
           </div>
         </div>
       </div>

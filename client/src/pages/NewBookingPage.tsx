@@ -1,10 +1,13 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 import type { Course, Booking } from "../types";
 
 export default function NewBookingPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [searchParams] = useSearchParams();
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState("");
@@ -17,6 +20,7 @@ export default function NewBookingPage() {
     startTime: "08:00",
     endTime: "16:00",
     city: "",
+    isPrivate: false,
     courseId: "",
     customCourse: "",
     sharedNotes: "",
@@ -26,7 +30,7 @@ export default function NewBookingPage() {
     api.get<Course[]>("/courses").then(setCourses);
   }, []);
 
-  const update = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }));
+  const update = (field: string, value: string | boolean) => setForm((f) => ({ ...f, [field]: value }));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -106,6 +110,18 @@ export default function NewBookingPage() {
             <input type="time" value={form.endTime} onChange={(e) => update("endTime", e.target.value)} required className="input" />
           </div>
         </div>
+
+        {isAdmin && (
+          <label className="flex items-center gap-2 text-sm text-brand-500 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.isPrivate}
+              onChange={(e) => update("isPrivate", e.target.checked)}
+              className="rounded border-brand-300 text-brand-700 focus:ring-brand-400"
+            />
+            Privat adminhändelse (visas som "Privat" för vanliga användare)
+          </label>
+        )}
 
         <div>
           <label className="label">Utbildning</label>

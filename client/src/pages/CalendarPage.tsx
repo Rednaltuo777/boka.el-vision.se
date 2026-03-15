@@ -20,7 +20,7 @@ export default function CalendarPage() {
 
   const events = bookings.map((b) => ({
     id: b.id,
-    title: `${b.client.company || b.client.name} – ${b.customCourse || b.course.name}`,
+    title: b.displayTitle || `${b.client.company || b.client.name} – ${b.customCourse || b.course.name}`,
     start: b.date,
     end: b.endDate || undefined,
     backgroundColor: "#1f1f1f",
@@ -36,6 +36,7 @@ export default function CalendarPage() {
     const start = info.event.start ? formatTime(info.event.start.toISOString()) : null;
     const end = info.event.end ? formatTime(info.event.end.toISOString()) : null;
     const timeLabel = start && end ? `${start}-${end}` : null;
+    const isMaskedPrivate = info.event.title === "Privat";
 
     return (
       <div className="flex items-center gap-1 min-w-0">
@@ -46,7 +47,7 @@ export default function CalendarPage() {
             </svg>
           </span>
         )}
-        <span className="truncate">{timeLabel ? `${timeLabel} ${info.event.title}` : info.event.title}</span>
+        <span className="truncate">{timeLabel && !isMaskedPrivate ? `${timeLabel} ${info.event.title}` : info.event.title}</span>
       </div>
     );
   };

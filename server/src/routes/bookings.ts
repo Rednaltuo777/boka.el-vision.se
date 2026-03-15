@@ -6,6 +6,44 @@ import * as outlook from "../lib/outlook";
 
 const router = Router();
 
+function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
+  return req.userRole === "admin" || booking.clientId === req.userId;
+}
+
+function toBookingTitle(booking: {
+  clientId: string;
+  isPrivate?: boolean;
+  customCourse: string | null;
+  course: { name: string };
+  client: { company: string | null; name: string | null };
+}, req: AuthRequest) {
+  const canViewPrivate = !booking.isPrivate || canManageBooking(booking, req);
+  if (!canViewPrivate) {
+    return "Privat";
+  }
+
+  return booking.client.company || booking.client.name
+    ? `${booking.client.company || booking.client.name} – ${booking.customCourse || booking.course.name}`
+    : booking.customCourse || booking.course.name;
+}
+
+function serializeBooking(booking: any, req: AuthRequest) {
+  const isOwnerOrAdmin = canManageBooking(booking, req);
+  const isMaskedPrivate = booking.isPrivate && !isOwnerOrAdmin;
+
+  return {
+    ...booking,
+    customCourse: isMaskedPrivate ? null : booking.customCourse,
+    course: isMaskedPrivate ? { ...booking.course, name: "Privat", isCustom: false } : booking.course,
+    client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "" } : booking.client,
+    city: isMaskedPrivate ? "Privat" : booking.city,
+    sharedNotes: isMaskedPrivate ? "" : booking.sharedNotes,
+    privateNotes: req.userRole === "admin" && !isMaskedPrivate ? booking.privateNotes : undefined,
+    displayTitle: isMaskedPrivate ? "Privat" : toBookingTitle(booking, req),
+    canAccessChat: !booking.isPrivate || isOwnerOrAdmin,
+  };
+}
+
 function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; authorId: string }>; chatReads: Array<{ lastReadAt: Date }>; privateNotes?: string | null }>(
   booking: T,
   userId: string,
@@ -21,7 +59,6 @@ function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; aut
 
   return {
     ...booking,
-    privateNotes: isAdmin ? booking.privateNotes : undefined,
     hasUnread,
   };
 }
@@ -165,7 +202,7 @@ async function sendBookingConfirmationEmail(booking: {
 
 // Create a booking
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
-  const { date, startTime, endTime, city, courseId, customCourse, sharedNotes } = req.body;
+  const { date, startTime, endTime, city, courseId, customCourse, sharedNotes, isPrivate } = req.body;
   if (!date || !startTime || !endTime || !city || !courseId) {
     res.status(400).json({ error: "Datum, starttid, sluttid, ort och kurs krävs" });
     return;
@@ -185,18 +222,20 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   }
 
   // Check for double booking on the same date
-  const existingOnDate = await prisma.booking.findFirst({
-    where: {
-      date: {
-        gte: new Date(bookingDate.toISOString().split("T")[0]),
-        lt: new Date(new Date(bookingDate.toISOString().split("T")[0]).getTime() + 86400000),
+  if (req.userRole !== "admin") {
+    const existingOnDate = await prisma.booking.findFirst({
+      where: {
+        date: {
+          gte: new Date(bookingDate.toISOString().split("T")[0]),
+          lt: new Date(new Date(bookingDate.toISOString().split("T")[0]).getTime() + 86400000),
+        },
       },
-    },
-  });
+    });
 
-  if (existingOnDate) {
-    res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
-    return;
+    if (existingOnDate) {
+      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
+      return;
+    }
   }
 
   // Geographic distance warning
@@ -226,6 +265,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       date: bookingDate,
       endDate: bookingEndDate,
       city,
+      isPrivate: req.userRole === "admin" ? Boolean(isPrivate) : false,
       courseId,
       customCourse: customCourse || null,
       sharedNotes: sharedNotes || "",
@@ -257,7 +297,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     console.error("Failed to send booking confirmation email:", err);
   });
 
-  res.json({ booking, distanceWarning });
+  res.json({ booking: serializeBooking(booking, req), distanceWarning });
 });
 
 // Get all bookings for all authenticated users
@@ -280,7 +320,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
     orderBy: { date: "asc" },
   });
 
-  const result = bookings.map((booking) => withUnreadStatus(booking, req.userId!, req.userRole === "admin"));
+  const result = bookings.map((booking) => serializeBooking(withUnreadStatus(booking, req.userId!, req.userRole === "admin"), req));
 
   res.json(result);
 });
@@ -311,7 +351,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  res.json(withUnreadStatus(booking, req.userId!, req.userRole === "admin"));
+  res.json(serializeBooking(withUnreadStatus(booking, req.userId!, req.userRole === "admin"), req));
 });
 
 // Update booking
@@ -323,12 +363,12 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  if (req.userRole !== "admin" && booking.clientId !== req.userId) {
+  if (!canManageBooking(booking, req)) {
     res.status(403).json({ error: "Åtkomst nekad" });
     return;
   }
 
-  const { date, endDate, city, courseId, customCourse, sharedNotes, privateNotes } = req.body;
+  const { date, endDate, city, courseId, customCourse, sharedNotes, privateNotes, isPrivate } = req.body;
   const { startTime, endTime } = req.body;
   const bookingDatePart = booking.date.toISOString().split("T")[0];
   const nextDate = (date || startTime)
@@ -357,19 +397,21 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   const startOfDay = new Date(nextDate.toISOString().split("T")[0]);
   const endOfDay = new Date(startOfDay.getTime() + 86400000);
 
-  const existingOnDate = await prisma.booking.findFirst({
-    where: {
-      id: { not: id },
-      date: {
-        gte: startOfDay,
-        lt: endOfDay,
+  if (req.userRole !== "admin") {
+    const existingOnDate = await prisma.booking.findFirst({
+      where: {
+        id: { not: id },
+        date: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
       },
-    },
-  });
+    });
 
-  if (existingOnDate) {
-    res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
-    return;
+    if (existingOnDate) {
+      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
+      return;
+    }
   }
 
   const dayBefore = new Date(startOfDay.getTime() - 86400000);
@@ -398,6 +440,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   if (date || startTime) data.date = nextDate;
   if (date || startTime || endTime || endDate !== undefined) data.endDate = nextEndDate;
   if (city) data.city = city;
+  if (isPrivate !== undefined && req.userRole === "admin") data.isPrivate = Boolean(isPrivate);
   if (courseId) data.courseId = courseId;
   if (customCourse !== undefined) data.customCourse = customCourse || null;
   if (sharedNotes !== undefined) data.sharedNotes = sharedNotes;
@@ -427,8 +470,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   }
 
   res.json({
-    ...updated,
-    privateNotes: req.userRole === "admin" ? updated.privateNotes : undefined,
+    ...serializeBooking(updated, req),
     distanceWarning,
   });
 });

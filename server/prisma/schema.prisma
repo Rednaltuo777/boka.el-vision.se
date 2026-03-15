@@ -51,6 +51,7 @@ model Booking {
   date          DateTime
   endDate       DateTime?
   city          String
+  isPrivate     Boolean  @default(false)
   sharedNotes   String   @default("")
   privateNotes  String   @default("")
   customCourse  String?

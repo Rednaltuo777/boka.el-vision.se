@@ -19,6 +19,7 @@ export interface Booking {
   date: string;
   endDate: string | null;
   city: string;
+  isPrivate?: boolean;
   sharedNotes: string;
   privateNotes?: string;
   customCourse: string | null;
@@ -29,6 +30,8 @@ export interface Booking {
   createdAt: string;
   updatedAt: string;
   hasUnread?: boolean;
+  displayTitle?: string;
+  canAccessChat?: boolean;
 }
 
 export interface ChatMessage {
