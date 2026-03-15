@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
+import type { Course } from "../types";
 
 interface OutlookStatus {
   connected: boolean;
@@ -8,7 +10,17 @@ interface OutlookStatus {
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [outlookStatus, setOutlookStatus] = useState<OutlookStatus | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [courseActionLoading, setCourseActionLoading] = useState(false);
+  const [courseName, setCourseName] = useState("");
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [courseError, setCourseError] = useState("");
+  const [courseSuccess, setCourseSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,6 +45,90 @@ export default function SettingsPage() {
       .catch(() => setOutlookStatus({ connected: false, email: null }))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setCoursesLoading(false);
+      return;
+    }
+
+    api.get<Course[]>("/courses")
+      .then(setCourses)
+      .catch(() => setCourseError("Kunde inte hämta kurslistan"))
+      .finally(() => setCoursesLoading(false));
+  }, [isAdmin]);
+
+  const loadCourses = async () => {
+    const nextCourses = await api.get<Course[]>("/courses");
+    setCourses(nextCourses);
+  };
+
+  const resetCourseMessages = () => {
+    setCourseError("");
+    setCourseSuccess("");
+  };
+
+  const createCourse = async (e: FormEvent) => {
+    e.preventDefault();
+    resetCourseMessages();
+    setCourseActionLoading(true);
+
+    try {
+      await api.post<Course>("/courses", { name: courseName });
+      setCourseName("");
+      setCourseSuccess("Kursen lades till");
+      await loadCourses();
+    } catch (err) {
+      setCourseError(err instanceof Error ? err.message : "Kunde inte lägga till kursen");
+    } finally {
+      setCourseActionLoading(false);
+    }
+  };
+
+  const startEditingCourse = (course: Course) => {
+    resetCourseMessages();
+    setEditingCourseId(course.id);
+    setEditingName(course.name);
+  };
+
+  const saveCourse = async (id: string) => {
+    resetCourseMessages();
+    setCourseActionLoading(true);
+
+    try {
+      await api.put<Course>(`/courses/${id}`, { name: editingName });
+      setEditingCourseId(null);
+      setEditingName("");
+      setCourseSuccess("Kursen uppdaterades");
+      await loadCourses();
+    } catch (err) {
+      setCourseError(err instanceof Error ? err.message : "Kunde inte uppdatera kursen");
+    } finally {
+      setCourseActionLoading(false);
+    }
+  };
+
+  const deleteCourse = async (course: Course) => {
+    const confirmed = window.confirm(`Radera kursen \"${course.name}\"?`);
+    if (!confirmed) return;
+
+    resetCourseMessages();
+    setCourseActionLoading(true);
+
+    try {
+      await api.delete<{ success: boolean }>(`/courses/${course.id}`);
+      setCourseSuccess("Kursen raderades");
+      if (editingCourseId === course.id) {
+        setEditingCourseId(null);
+        setEditingName("");
+      }
+      await loadCourses();
+    } catch (err) {
+      setCourseError(err instanceof Error ? err.message : "Kunde inte radera kursen");
+    } finally {
+      setCourseActionLoading(false);
+    }
+  };
 
   const connectOutlook = async () => {
     setActionLoading(true);
@@ -170,6 +266,131 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="card">
+          <div className="p-6 border-b border-surface-border/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                <CoursesIcon className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-brand-800">Kurser</h2>
+                <p className="text-sm text-brand-400">Lägg till, byt namn på och radera kurser i listan</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <form onSubmit={createCourse} className="flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                value={courseName}
+                onChange={(e) => setCourseName(e.target.value)}
+                placeholder="Namn på ny kurs"
+                className="input flex-1"
+              />
+              <button type="submit" disabled={courseActionLoading} className="btn-primary disabled:opacity-50">
+                Lägg till kurs
+              </button>
+            </form>
+
+            {courseError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {courseError}
+              </div>
+            )}
+            {courseSuccess && (
+              <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-700">
+                {courseSuccess}
+              </div>
+            )}
+
+            {coursesLoading ? (
+              <div className="flex items-center gap-3 text-brand-400">
+                <div className="w-4 h-4 border-2 border-brand-300 border-t-brand-600 rounded-full animate-spin" />
+                <span className="text-sm">Laddar kurser...</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {courses.map((course) => {
+                  const isEditing = editingCourseId === course.id;
+
+                  return (
+                    <div key={course.id} className="rounded-2xl border border-surface-border bg-white px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex-1">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            className="input"
+                          />
+                        ) : (
+                          <div>
+                            <p className="font-medium text-brand-700">{course.name}</p>
+                            <p className="text-xs text-brand-400 mt-1">Standardkurs i bokningslistan</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {isEditing ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void saveCourse(course.id)}
+                              disabled={courseActionLoading}
+                              className="btn-primary disabled:opacity-50"
+                            >
+                              Spara
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingCourseId(null);
+                                setEditingName("");
+                                resetCourseMessages();
+                              }}
+                              className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                            >
+                              Avbryt
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => startEditingCourse(course)}
+                              className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
+                            >
+                              Redigera
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteCourse(course)}
+                              disabled={courseActionLoading}
+                              className="inline-flex items-center rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Radera
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {courses.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-surface-border px-4 py-6 text-sm text-brand-400">
+                    Inga kurser finns ännu.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -203,6 +424,15 @@ function DisconnectIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+    </svg>
+  );
+}
+
+function CoursesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5M3.75 9.75h16.5M3.75 14.25h10.5m-10.5 4.5h10.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m16.5 15.75 2.25 2.25 3.75-4.5" />
     </svg>
   );
 }
