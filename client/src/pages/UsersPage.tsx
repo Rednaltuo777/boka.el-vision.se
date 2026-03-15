@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState("");
   const [savingLogo, setSavingLogo] = useState(false);
+  const [brokenLogoUserIds, setBrokenLogoUserIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (user?.role !== "admin") return;
@@ -73,8 +74,9 @@ export default function UsersPage() {
     try {
       const updatedUser = await api.put<User>(`/users/${userId}`, { logoUrl });
       setUsers((current) => current.map((item) => item.id === userId ? updatedUser : item));
-      setEditingUserId(null);
-      setLogoUrl("");
+      setEditingUserId(userId);
+      setLogoUrl(updatedUser.logoUrl || "");
+      setBrokenLogoUserIds((current) => current.filter((id) => id !== userId));
       setMessage("Logotypen sparades.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte spara logotypen");
@@ -106,8 +108,9 @@ export default function UsersPage() {
       const nextLogoUrl = await readFileAsDataUrl(file);
       const updatedUser = await api.put<User>(`/users/${selectedUserId}`, { logoUrl: nextLogoUrl });
       setUsers((current) => current.map((item) => item.id === selectedUserId ? updatedUser : item));
-      setEditingUserId(null);
-      setLogoUrl("");
+      setEditingUserId(selectedUserId);
+      setLogoUrl(updatedUser.logoUrl || nextLogoUrl);
+      setBrokenLogoUserIds((current) => current.filter((id) => id !== selectedUserId));
       setMessage("Logotypen laddades upp.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte ladda upp logotypen");
@@ -213,8 +216,13 @@ export default function UsersPage() {
               <div key={u.id} className="p-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-surface-border overflow-hidden flex items-center justify-center text-sm font-bold text-brand-600 shrink-0 shadow-sm">
-                    {u.logoUrl ? (
-                      <img src={u.logoUrl} alt={u.company || u.name || "Logotyp"} className="h-full w-full object-contain bg-white p-1.5" />
+                    {u.logoUrl && !brokenLogoUserIds.includes(u.id) ? (
+                      <img
+                        src={u.logoUrl || ""}
+                        alt={u.company || u.name || "Logotyp"}
+                        className="h-full w-full object-contain bg-white p-1.5"
+                        onError={() => setBrokenLogoUserIds((current) => current.includes(u.id) ? current : [...current, u.id])}
+                      />
                     ) : (
                       u.name?.[0]?.toUpperCase() || "?"
                     )}
@@ -244,17 +252,42 @@ export default function UsersPage() {
                   )}
                 </div>
 
+                {u.logoUrl && (
+                  <div className={`rounded-2xl border px-4 py-3 ${brokenLogoUserIds.includes(u.id) ? "border-amber-200 bg-amber-50" : "border-surface-border bg-surface-secondary/40"}`}>
+                    <p className="text-xs font-medium uppercase tracking-wide text-brand-300 mb-3">Sparad logotyp</p>
+                    {brokenLogoUserIds.includes(u.id) ? (
+                      <p className="text-sm text-amber-700">Logotypen är sparad men kunde inte visas. Kontrollera bildlänken eller prova att ladda upp filen igen.</p>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <div className="h-20 w-20 rounded-2xl border border-surface-border bg-white overflow-hidden flex items-center justify-center shrink-0">
+                          <img
+                            src={u.logoUrl || ""}
+                            alt={u.company || u.name || "Logotyp"}
+                            className="h-full w-full object-contain p-2"
+                            onError={() => setBrokenLogoUserIds((current) => current.includes(u.id) ? current : [...current, u.id])}
+                          />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-brand-700">{u.company || u.name || "Uppdragsgivare"}</p>
+                          <p className="text-xs text-brand-400 mt-1 break-all">{u.logoUrl}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {editingUserId === u.id && u.role !== "admin" && (
                   <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
                     <div>
                       <label className="label">Förhandsvisning</label>
                       <div className="mt-2 flex items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
                         <div className="h-20 w-20 rounded-2xl border border-surface-border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
-                          {logoUrl || u.logoUrl ? (
+                          {((logoUrl || u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
                             <img
                               src={logoUrl || u.logoUrl || ""}
                               alt={u.company || u.name || "Logotyp"}
                               className="h-full w-full object-contain bg-white p-2"
+                              onError={() => setBrokenLogoUserIds((current) => current.includes(u.id) ? current : [...current, u.id])}
                             />
                           ) : (
                             <span className="text-xs text-brand-300">Ingen logga</span>
