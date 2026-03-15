@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState("");
+  const [previewLogoUrl, setPreviewLogoUrl] = useState("");
   const [savingLogo, setSavingLogo] = useState(false);
   const [brokenLogoUserIds, setBrokenLogoUserIds] = useState<string[]>([]);
 
@@ -64,6 +65,7 @@ export default function UsersPage() {
     setMessage("");
     setEditingUserId(selectedUser.id);
     setLogoUrl(selectedUser.logoUrl || "");
+    setPreviewLogoUrl(selectedUser.logoUrl || "");
   };
 
   const saveLogo = async (userId: string) => {
@@ -76,6 +78,7 @@ export default function UsersPage() {
       setUsers((current) => current.map((item) => item.id === userId ? updatedUser : item));
       setEditingUserId(userId);
       setLogoUrl(updatedUser.logoUrl || "");
+      setPreviewLogoUrl(updatedUser.logoUrl || "");
       setBrokenLogoUserIds((current) => current.filter((id) => id !== userId));
       setMessage("Logotypen sparades.");
     } catch (err) {
@@ -102,15 +105,24 @@ export default function UsersPage() {
 
     setError("");
     setMessage("");
+    setSavingLogo(true);
 
     try {
-      const nextLogoUrl = await readFileAsDataUrl(file);
+      const objectUrl = URL.createObjectURL(file);
       setEditingUserId(selectedUserId);
-      setLogoUrl(nextLogoUrl);
+      setPreviewLogoUrl(objectUrl);
       setBrokenLogoUserIds((current) => current.filter((id) => id !== selectedUserId));
-      setMessage("Bild vald. Klicka på Spara logotyp för att spara den.");
+
+      const nextLogoUrl = await readFileAsDataUrl(file);
+      setLogoUrl(nextLogoUrl);
+      const updatedUser = await api.put<User>(`/users/${selectedUserId}`, { logoUrl: nextLogoUrl });
+      setUsers((current) => current.map((item) => item.id === selectedUserId ? updatedUser : item));
+      setPreviewLogoUrl(updatedUser.logoUrl || nextLogoUrl);
+      setMessage("Logotypen laddades upp och sparades.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte ladda upp logotypen");
+    } finally {
+      setSavingLogo(false);
     }
   };
 
@@ -277,9 +289,9 @@ export default function UsersPage() {
                       <label className="label">Förhandsvisning</label>
                       <div className="mt-2 flex items-center gap-4 rounded-2xl border border-surface-border bg-white p-4">
                         <div className="h-20 w-20 rounded-2xl border border-surface-border bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
-                          {((editingUserId === u.id ? logoUrl : u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
+                          {((editingUserId === u.id ? (previewLogoUrl || logoUrl) : u.logoUrl) && !brokenLogoUserIds.includes(u.id)) ? (
                             <img
-                              src={editingUserId === u.id ? logoUrl || u.logoUrl || "" : u.logoUrl || ""}
+                              src={editingUserId === u.id ? previewLogoUrl || logoUrl || u.logoUrl || "" : u.logoUrl || ""}
                               alt={u.company || u.name || "Logotyp"}
                               className="h-full w-full object-contain bg-white p-2"
                               onError={() => setBrokenLogoUserIds((current) => current.includes(u.id) ? current : [...current, u.id])}
@@ -321,6 +333,11 @@ export default function UsersPage() {
                       className="input"
                     />
                     <p className="text-xs text-brand-400">Ange en publik bildlänk till uppdragsgivarens logotyp. Förhandsvisningen uppdateras direkt.</p>
+                    {editingUserId === u.id && (error || message) && (
+                      <div className={`rounded-xl px-3 py-2 text-sm ${error ? "border border-red-200 bg-red-50 text-red-700" : "border border-accent-200 bg-accent-50 text-accent-700"}`}>
+                        {error || message}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -335,6 +352,7 @@ export default function UsersPage() {
                         onClick={() => {
                           setEditingUserId(null);
                           setLogoUrl("");
+                          setPreviewLogoUrl("");
                         }}
                         className="inline-flex items-center rounded-xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-500 hover:bg-surface-secondary"
                       >
