@@ -117,6 +117,28 @@ function combineDateAndTime(dateValue: string, timeValue: string): Date {
   return new Date(`${dateValue}T${timeValue}`);
 }
 
+function formatDateOnly(dateValue: Date): string {
+  return dateValue.toISOString().split("T")[0];
+}
+
+function addDays(dateValue: Date, days: number): Date {
+  const result = new Date(dateValue);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function buildDateRange(startDateValue: string, endDateValue: string): string[] {
+  const startDate = startOfDay(new Date(`${startDateValue}T12:00:00`));
+  const endDate = startOfDay(new Date(`${endDateValue}T12:00:00`));
+  const dates: string[] = [];
+
+  for (let current = startDate; current <= endDate; current = addDays(current, 1)) {
+    dates.push(formatDateOnly(current));
+  }
+
+  return dates;
+}
+
 function startOfDay(dateValue: Date): Date {
   return new Date(Date.UTC(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate()));
 }
@@ -224,108 +246,138 @@ async function sendBookingConfirmationEmail(booking: {
 
 // Create a booking
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
-  const { date, startTime, endTime, city, courseId, customCourse, sharedNotes, isPrivate } = req.body;
+  const { date, dateTo, startTime, endTime, city, courseId, customCourse, sharedNotes, isPrivate } = req.body;
   if (!date || !startTime || !endTime || !city || !courseId) {
     res.status(400).json({ error: "Datum, starttid, sluttid, ort och kurs krävs" });
     return;
   }
 
-  const bookingDate = combineDateAndTime(date, startTime);
-  const bookingEndDate = combineDateAndTime(date, endTime);
+  const lastDate = req.userRole === "admin" && dateTo ? dateTo : date;
+  const selectedDates = req.userRole === "admin" ? buildDateRange(date, lastDate) : [date];
 
-  if (Number.isNaN(bookingDate.getTime()) || Number.isNaN(bookingEndDate.getTime())) {
-    res.status(400).json({ error: "Ogiltigt datum eller tid" });
+  if (selectedDates.length === 0) {
+    res.status(400).json({ error: "Ogiltigt datumintervall" });
     return;
   }
 
-  if (bookingEndDate <= bookingDate) {
-    res.status(400).json({ error: "Sluttiden måste vara senare än starttiden" });
-    return;
-  }
-
-  const blockingPeriod = await findBlockingPeriodForDate(bookingDate);
-  if (blockingPeriod) {
-    res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
-    return;
-  }
-
-  // Check for double booking on the same date
-  if (req.userRole !== "admin") {
-    const existingOnDate = await prisma.booking.findFirst({
-      where: {
-        date: {
-          gte: startOfDay(bookingDate),
-          lt: endOfDay(bookingDate),
-        },
-      },
-    });
-
-    if (existingOnDate) {
-      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
+  if (req.userRole === "admin") {
+    const firstDate = new Date(`${date}T12:00:00`);
+    const lastSelectedDate = new Date(`${lastDate}T12:00:00`);
+    if (lastSelectedDate < firstDate) {
+      res.status(400).json({ error: "Datum till måste vara samma dag eller senare än datum från" });
       return;
     }
   }
 
-  // Geographic distance warning
-  const dayBefore = new Date(bookingDate.getTime() - 86400000);
-  const dayAfter = new Date(bookingDate.getTime() + 86400000);
-
-  const adjacentBookings = await prisma.booking.findMany({
-    where: {
-      OR: [
-        { date: { gte: dayBefore, lt: bookingDate } },
-        { date: { gte: bookingDate, lt: dayAfter } },
-      ],
-    },
-  });
-
   let distanceWarning: string | null = null;
-  for (const adj of adjacentBookings) {
-    const warning = getDistanceWarning(city, adj.city);
-    if (warning) {
-      distanceWarning = warning;
-      break;
+
+  for (const selectedDate of selectedDates) {
+    const bookingDate = combineDateAndTime(selectedDate, startTime);
+    const bookingEndDate = combineDateAndTime(selectedDate, endTime);
+
+    if (Number.isNaN(bookingDate.getTime()) || Number.isNaN(bookingEndDate.getTime())) {
+      res.status(400).json({ error: "Ogiltigt datum eller tid" });
+      return;
+    }
+
+    if (bookingEndDate <= bookingDate) {
+      res.status(400).json({ error: "Sluttiden måste vara senare än starttiden" });
+      return;
+    }
+
+    const blockingPeriod = await findBlockingPeriodForDate(bookingDate);
+    if (blockingPeriod) {
+      res.status(409).json({ error: `Datumet ${selectedDate} ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
+      return;
+    }
+
+    if (req.userRole !== "admin") {
+      const existingOnDate = await prisma.booking.findFirst({
+        where: {
+          date: {
+            gte: startOfDay(bookingDate),
+            lt: endOfDay(bookingDate),
+          },
+        },
+      });
+
+      if (existingOnDate) {
+        res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
+        return;
+      }
+    }
+
+    if (!distanceWarning) {
+      const dayBefore = new Date(bookingDate.getTime() - 86400000);
+      const dayAfter = new Date(bookingDate.getTime() + 86400000);
+
+      const adjacentBookings = await prisma.booking.findMany({
+        where: {
+          OR: [
+            { date: { gte: dayBefore, lt: bookingDate } },
+            { date: { gte: bookingDate, lt: dayAfter } },
+          ],
+        },
+      });
+
+      for (const adjacentBooking of adjacentBookings) {
+        const warning = getDistanceWarning(city, adjacentBooking.city);
+        if (warning) {
+          distanceWarning = warning;
+          break;
+        }
+      }
     }
   }
 
-  const booking = await prisma.booking.create({
-    data: {
-      date: bookingDate,
-      endDate: bookingEndDate,
-      city,
-      isPrivate: req.userRole === "admin" ? Boolean(isPrivate) : false,
-      courseId,
-      customCourse: customCourse || null,
-      sharedNotes: sharedNotes || "",
-      clientId: req.userId!,
-    },
-    include: {
-      course: true,
-      client: { select: { id: true, name: true, company: true, email: true } },
-    },
+  const createdBookings = await prisma.$transaction(
+    selectedDates.map((selectedDate) => prisma.booking.create({
+      data: {
+        date: combineDateAndTime(selectedDate, startTime),
+        endDate: combineDateAndTime(selectedDate, endTime),
+        city,
+        isPrivate: req.userRole === "admin" ? Boolean(isPrivate) : false,
+        courseId,
+        customCourse: customCourse || null,
+        sharedNotes: sharedNotes || "",
+        clientId: req.userId!,
+      },
+      include: {
+        course: true,
+        client: { select: { id: true, name: true, company: true, email: true } },
+      },
+    })),
+  );
+
+  createdBookings.forEach((booking) => {
+    outlook.createEvent({
+      id: booking.id,
+      date: booking.date,
+      endDate: booking.endDate,
+      city: booking.city,
+      courseName: booking.customCourse || booking.course.name,
+      clientName: booking.client.name || "",
+      clientCompany: booking.client.company || undefined,
+      sharedNotes: booking.sharedNotes,
+    }).then((eventId) => {
+      if (eventId) {
+        prisma.booking.update({ where: { id: booking.id }, data: { outlookEventId: eventId } }).catch(() => {});
+      }
+    }).catch(() => {});
   });
 
-  // Sync to Outlook calendar (fire-and-forget)
-  outlook.createEvent({
-    id: booking.id,
-    date: booking.date,
-    endDate: booking.endDate,
-    city: booking.city,
-    courseName: booking.customCourse || booking.course.name,
-    clientName: booking.client.name || "",
-    clientCompany: booking.client.company || undefined,
-    sharedNotes: booking.sharedNotes,
-  }).then((eventId) => {
-    if (eventId) {
-      prisma.booking.update({ where: { id: booking.id }, data: { outlookEventId: eventId } }).catch(() => {});
-    }
-  }).catch(() => {});
+  if (createdBookings.length === 1) {
+    sendBookingConfirmationEmail(createdBookings[0]).catch((err) => {
+      console.error("Failed to send booking confirmation email:", err);
+    });
+  }
 
-  sendBookingConfirmationEmail(booking).catch((err) => {
-    console.error("Failed to send booking confirmation email:", err);
+  res.json({
+    booking: serializeBooking(createdBookings[0], req),
+    bookings: createdBookings.map((booking) => serializeBooking(booking, req)),
+    createdCount: createdBookings.length,
+    distanceWarning,
   });
-
-  res.json({ booking: serializeBooking(booking, req), distanceWarning });
 });
 
 // Get all bookings for all authenticated users

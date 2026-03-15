@@ -19,6 +19,7 @@ export default function NewBookingPage() {
 
   const [form, setForm] = useState({
     date: searchParams.get("date") || "",
+    dateTo: searchParams.get("date") || "",
     startTime: "08:00",
     endTime: "16:00",
     city: "",
@@ -32,7 +33,14 @@ export default function NewBookingPage() {
     api.get<Course[]>("/courses").then(setCourses);
   }, []);
 
-  const update = (field: string, value: string | boolean) => setForm((f) => ({ ...f, [field]: value }));
+  const update = (field: string, value: string | boolean) => setForm((current) => {
+    if (field === "date" && typeof value === "string") {
+      const nextDateTo = !current.dateTo || current.dateTo < value ? value : current.dateTo;
+      return { ...current, date: value, dateTo: nextDateTo };
+    }
+
+    return { ...current, [field]: value };
+  });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -40,10 +48,18 @@ export default function NewBookingPage() {
     setWarning("");
     setLoading(true);
     try {
-      const res = await api.post<{ booking: Booking; distanceWarning: string | null }>("/bookings", {
+      const res = await api.post<{ booking: Booking; bookings?: Booking[]; createdCount?: number; distanceWarning: string | null }>("/bookings", {
         ...form,
+        dateTo: isAdmin ? form.dateTo : form.date,
         courseId: form.courseId || courses[0]?.id,
       });
+
+      if ((res.createdCount || 1) > 1) {
+        window.alert(`${res.createdCount} händelser skapades.`);
+        navigate("/");
+        return;
+      }
+
       if (res.distanceWarning) {
         setWarning(res.distanceWarning);
         setTimeout(() => navigate(`/bookings/${res.booking.id}`), 3000);
@@ -91,16 +107,28 @@ export default function NewBookingPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 gap-4 ${isAdmin ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <div>
-            <label className="label">Datum</label>
+            <label className="label">{isAdmin ? "Datum från" : "Datum"}</label>
             <input type="date" value={form.date} onChange={(e) => update("date", e.target.value)} required className="input" />
           </div>
+          {isAdmin && (
+            <div>
+              <label className="label">Datum till</label>
+              <input type="date" value={form.dateTo} min={form.date || undefined} onChange={(e) => update("dateTo", e.target.value)} required className="input" />
+            </div>
+          )}
           <div>
             <label className="label">Ort</label>
             <input type="text" value={form.city} onChange={(e) => update("city", e.target.value)} required placeholder="T.ex. Stockholm, Göteborg..." className="input" />
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="rounded-2xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-brand-600">
+            Samma händelse skapas för varje dag i det valda datumintervallet.
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -167,7 +195,7 @@ export default function NewBookingPage() {
         </div>
 
         <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">
-          {loading ? "Skapar bokning..." : "Skapa bokning"}
+          {loading ? "Skapar händelser..." : isAdmin ? "Skapa händelser" : "Skapa bokning"}
         </button>
       </form>
     </div>
