@@ -169,6 +169,18 @@ async function findBlockingPeriodForDate(dateValue: Date) {
   });
 }
 
+async function findBookingOnDate(dateValue: Date, excludeBookingId?: string) {
+  return prisma.booking.findFirst({
+    where: {
+      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      date: {
+        gte: startOfDay(dateValue),
+        lt: endOfDay(dateValue),
+      },
+    },
+  });
+}
+
 async function sendBookingConfirmationEmail(booking: {
   id: string;
   date: Date;
@@ -294,20 +306,10 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    if (req.userRole !== "admin") {
-      const existingOnDate = await prisma.booking.findFirst({
-        where: {
-          date: {
-            gte: startOfDay(bookingDate),
-            lt: endOfDay(bookingDate),
-          },
-        },
-      });
-
-      if (existingOnDate) {
-        res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
-        return;
-      }
+    const existingOnDate = await findBookingOnDate(bookingDate);
+    if (existingOnDate) {
+      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Det går inte att boka flera utbildningar samma dag." });
+      return;
     }
 
     if (!distanceWarning) {
@@ -486,21 +488,10 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   const startOfBookingDay = startOfDay(nextDate);
   const endOfBookingDay = endOfDay(nextDate);
 
-  if (req.userRole !== "admin") {
-    const existingOnDate = await prisma.booking.findFirst({
-      where: {
-        id: { not: id },
-        date: {
-          gte: startOfBookingDay,
-          lt: endOfBookingDay,
-        },
-      },
-    });
-
-    if (existingOnDate) {
-      res.status(409).json({ error: "Det finns redan en bokning på detta datum. Dubbelbokning är inte tillåten." });
-      return;
-    }
+  const existingOnDate = await findBookingOnDate(nextDate, id);
+  if (existingOnDate) {
+    res.status(409).json({ error: "Det finns redan en bokning på detta datum. Det går inte att boka flera utbildningar samma dag." });
+    return;
   }
 
   const dayBefore = new Date(startOfBookingDay.getTime() - 86400000);
