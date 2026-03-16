@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import type { Booking, ChatMessage, Course } from "../types";
 
 const PRIVATE_OPTION = "__private__";
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 
 type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
 
@@ -32,8 +33,30 @@ function toDateInput(value: string) {
 function toTimeInput(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
-  if (date.getHours() === 0 && date.getMinutes() === 0) return "";
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const formatted = date.toLocaleTimeString("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  if (formatted === "00:00") return "";
+  return formatted;
+}
+
+function formatStockholmDate(value: string) {
+  return new Date(value).toLocaleDateString("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatStockholmShortDate(value: string) {
+  return new Date(value).toLocaleDateString("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+  });
 }
 
 function formatTimeRange(dateValue: string, endDateValue: string | null) {
@@ -251,7 +274,7 @@ export default function BookingPage() {
           <div>
             <h1 className="text-2xl font-bold text-brand-800">{booking.displayTitle || booking.customCourse || booking.course.name}</h1>
             <p className="text-brand-400 text-sm mt-1">
-              {new Date(booking.date).toLocaleDateString("sv-SE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+              {formatStockholmDate(booking.date)}
               {formatTimeRange(booking.date, booking.endDate) ? ` · ${formatTimeRange(booking.date, booking.endDate)}` : ""}
               {" · "}{booking.city}
             </p>
@@ -440,7 +463,7 @@ export default function BookingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Datum</p>
-                  <p className="font-medium text-brand-700">{new Date(booking.date).toLocaleDateString("sv-SE")}</p>
+                  <p className="font-medium text-brand-700">{formatStockholmShortDate(booking.date)}</p>
                 </div>
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Tid</p>

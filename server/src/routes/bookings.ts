@@ -6,6 +6,70 @@ import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
 const router = Router();
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+
+const stockholmOffsetFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+const stockholmTimeFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const stockholmLongDateFormatter = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+function getTimeZoneOffsetMinutes(dateValue: Date, timeZone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(dateValue);
+  const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const asUtc = Date.UTC(
+    Number(lookup.year),
+    Number(lookup.month) - 1,
+    Number(lookup.day),
+    Number(lookup.hour),
+    Number(lookup.minute),
+    Number(lookup.second),
+  );
+
+  return (asUtc - dateValue.getTime()) / 60000;
+}
+
+function createStockholmDate(dateValue: string, timeValue: string): Date {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const [hour, minute] = timeValue.split(":").map(Number);
+
+  const utcGuessMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  const firstOffset = getTimeZoneOffsetMinutes(new Date(utcGuessMs), STOCKHOLM_TIME_ZONE);
+  const candidateMs = utcGuessMs - firstOffset * 60 * 1000;
+  const secondOffset = getTimeZoneOffsetMinutes(new Date(candidateMs), STOCKHOLM_TIME_ZONE);
+
+  return new Date(utcGuessMs - secondOffset * 60 * 1000);
+}
 
 function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
   return req.userRole === "admin" || booking.clientId === req.userId;
@@ -171,7 +235,7 @@ async function getDistanceWarning(city1: string, city2: string): Promise<string 
 }
 
 function combineDateAndTime(dateValue: string, timeValue: string): Date {
-  return new Date(`${dateValue}T${timeValue}`);
+  return createStockholmDate(dateValue, timeValue);
 }
 
 function formatDateOnly(dateValue: Date): string {
@@ -206,7 +270,7 @@ function endOfDay(dateValue: Date): Date {
 
 function toTimeLabel(dateValue: Date | null): string | null {
   if (!dateValue) return null;
-  return dateValue.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+  return stockholmTimeFormatter.format(dateValue);
 }
 
 function getBlockingPeriodLabel(type: string): string {
@@ -294,11 +358,7 @@ async function sendBookingConfirmationEmail(booking: {
   const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").trim();
   const bookingUrl = `${clientUrl}/bookings/${booking.id}`;
   const courseName = booking.customCourse || booking.course.name;
-  const formattedDate = booking.date.toLocaleDateString("sv-SE", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const formattedDate = stockholmLongDateFormatter.format(booking.date);
   const startTime = toTimeLabel(booking.date);
   const endTime = toTimeLabel(booking.endDate);
   const formattedTime = startTime && endTime ? `${startTime}–${endTime}` : null;

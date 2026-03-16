@@ -17,6 +17,25 @@ interface BlockingPeriodDraft {
   type: BlockingPeriodType;
 }
 
+const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+
+function formatStockholmTime(value: string | Date) {
+  const dateValue = value instanceof Date ? value : new Date(value);
+  return dateValue.toLocaleTimeString("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
+
+function formatStockholmDate(value: string | Date) {
+  const dateValue = value instanceof Date ? value : new Date(value);
+  return dateValue.toLocaleDateString("sv-SE", {
+    timeZone: STOCKHOLM_TIME_ZONE,
+  });
+}
+
 function getBlockingPeriodLabel(type: BlockingPeriodType) {
   return type === "vacation" ? "Semester" : "Spärrad för bokning";
 }
@@ -44,8 +63,6 @@ export default function CalendarPage() {
   const [savingPeriod, setSavingPeriod] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
-
-  const formatTime = (value: string) => new Date(value).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
 
   const loadCalendarData = async () => {
     const [bookingData, blockingPeriodData] = await Promise.all([
@@ -126,8 +143,8 @@ export default function CalendarPage() {
     const hasUnread = Boolean(info.event.extendedProps.hasUnread);
     const logoUrl = typeof info.event.extendedProps.logoUrl === "string" ? info.event.extendedProps.logoUrl : null;
     const city = typeof info.event.extendedProps.city === "string" ? info.event.extendedProps.city : "";
-    const start = info.event.start ? formatTime(info.event.start.toISOString()) : null;
-    const end = info.event.end ? formatTime(info.event.end.toISOString()) : null;
+    const start = info.event.start ? formatStockholmTime(info.event.start) : null;
+    const end = info.event.end ? formatStockholmTime(info.event.end) : null;
     const timeLabel = start && end ? `${start}-${end}` : null;
     const isMaskedPrivate = info.event.title === "Privat";
     const displayTitle = isMaskedPrivate ? "+Privat händelse" : info.event.title;
@@ -241,7 +258,7 @@ export default function CalendarPage() {
                   <div className="min-w-0">
                     <p className="font-medium text-brand-700 truncate">{booking.displayTitle || booking.customCourse || booking.course.name}</p>
                     <p className="text-sm text-brand-400 mt-1">
-                      {new Date(booking.date).toLocaleDateString("sv-SE")} · {booking.city}
+                      {formatStockholmDate(booking.date)} · {booking.city}
                     </p>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 shrink-0">
