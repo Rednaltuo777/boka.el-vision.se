@@ -27,6 +27,7 @@ model User {
   blockingPeriods BlockingPeriod[]
   chatMessages ChatMessage[]
   chatReads    BookingChatRead[]
+  bookingChanges BookingChange[]
 }
 
 model Invitation {
@@ -53,6 +54,8 @@ model Booking {
   date          DateTime
   endDate       DateTime?
   city          String
+  participants  Int      @default(1)
+  rescheduleToken Boolean @default(true)
   isPrivate     Boolean  @default(false)
   sharedNotes   String   @default("")
   privateNotes  String   @default("")
@@ -68,7 +71,22 @@ model Booking {
 
   chatMessages   ChatMessage[]
   chatReads      BookingChatRead[]
+  changes        BookingChange[]
   outlookEventId String?
+}
+
+model BookingChange {
+  id         String   @id @default(uuid())
+  changeType String
+  oldValue   Json?
+  newValue   Json?
+  createdAt  DateTime @default(now())
+
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String
+
+  changedBy   User   @relation(fields: [changedById], references: [id], onDelete: Cascade)
+  changedById String
 }
 
 model BlockingPeriod {

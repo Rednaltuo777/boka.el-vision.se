@@ -7,6 +7,7 @@ import * as outlook from "../lib/outlook";
 
 const router = Router();
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const BOOKING_EDIT_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 const stockholmOffsetFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: STOCKHOLM_TIME_ZONE,
@@ -75,6 +76,58 @@ function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
   return req.userRole === "admin" || booking.clientId === req.userId;
 }
 
+function isWithinEditWindow(createdAt: Date) {
+  return Date.now() <= createdAt.getTime() + BOOKING_EDIT_WINDOW_MS;
+}
+
+function canEditBookingFields(booking: { clientId: string; createdAt: Date }, req: AuthRequest) {
+  if (!canManageBooking(booking, req)) {
+    return false;
+  }
+
+  if (req.userRole === "admin") {
+    return true;
+  }
+
+  return isWithinEditWindow(booking.createdAt);
+}
+
+function canMoveBooking(booking: { clientId: string; rescheduleToken: boolean }, req: AuthRequest) {
+  if (!canManageBooking(booking, req)) {
+    return false;
+  }
+
+  if (req.userRole === "admin") {
+    return true;
+  }
+
+  return booking.rescheduleToken;
+}
+
+function formatStockholmDateOnly(dateValue: Date): string {
+  const parts = stockholmOffsetFormatter.formatToParts(dateValue);
+  const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+async function logBookingChange(input: {
+  bookingId: string;
+  changedById: string;
+  changeType: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+}) {
+  await prisma.bookingChange.create({
+    data: {
+      bookingId: input.bookingId,
+      changedById: input.changedById,
+      changeType: input.changeType,
+      oldValue: input.oldValue === undefined ? undefined : input.oldValue as object,
+      newValue: input.newValue === undefined ? undefined : input.newValue as object,
+    },
+  });
+}
+
 function toBookingTitle(booking: {
   clientId: string;
   isPrivate?: boolean;
@@ -95,9 +148,12 @@ function toBookingTitle(booking: {
 function serializeBooking(booking: any, req: AuthRequest) {
   const isOwnerOrAdmin = canManageBooking(booking, req);
   const isMaskedPrivate = booking.isPrivate && !isOwnerOrAdmin;
+  const editable = canEditBookingFields(booking, req);
+  const movable = canMoveBooking(booking, req);
 
   return {
     ...booking,
+    notes: isMaskedPrivate ? "" : booking.sharedNotes,
     customCourse: isMaskedPrivate ? null : booking.customCourse,
     course: isMaskedPrivate ? { ...booking.course, name: "Privat", isCustom: false } : booking.course,
     client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "", logoUrl: null } : booking.client,
@@ -108,6 +164,9 @@ function serializeBooking(booking: any, req: AuthRequest) {
     latestChatAt: isOwnerOrAdmin ? booking.latestChatAt : null,
     displayTitle: isMaskedPrivate ? "Privat" : toBookingTitle(booking, req),
     canAccessChat: isOwnerOrAdmin,
+    canEditBookingFields: editable,
+    canMoveBooking: movable,
+    editWindowEndsAt: new Date(booking.createdAt.getTime() + BOOKING_EDIT_WINDOW_MS).toISOString(),
   };
 }
 
@@ -421,9 +480,15 @@ async function sendBookingConfirmationEmail(booking: {
 
 // Create a booking
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
-  const { date, dateTo, startTime, endTime, city, courseId, customCourse, sharedNotes, isPrivate } = req.body;
+  const { date, dateTo, startTime, endTime, city, courseId, customCourse, sharedNotes, notes, isPrivate, participants } = req.body;
   if (!date || !startTime || !endTime || !city || !courseId) {
     res.status(400).json({ error: "Datum, starttid, sluttid, ort och kurs krävs" });
+    return;
+  }
+
+  const parsedParticipants = participants === undefined ? 1 : Number(participants);
+  if (!Number.isInteger(parsedParticipants) || parsedParticipants < 1) {
+    res.status(400).json({ error: "Participants måste vara ett heltal större än 0" });
     return;
   }
 
@@ -502,9 +567,11 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
         endDate: combineDateAndTime(selectedDate, endTime),
         city,
         isPrivate: req.userRole === "admin" ? Boolean(isPrivate) : false,
+        participants: parsedParticipants,
+        rescheduleToken: true,
         courseId,
         customCourse: customCourse || null,
-        sharedNotes: sharedNotes || "",
+        sharedNotes: sharedNotes || notes || "",
         clientId: req.userId!,
       },
       include: {
@@ -513,6 +580,19 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       },
     })),
   );
+
+  await Promise.all(createdBookings.map((booking) => logBookingChange({
+    bookingId: booking.id,
+    changedById: req.userId!,
+    changeType: "BOOKING_CREATED",
+    newValue: {
+      date: booking.date.toISOString(),
+      endDate: booking.endDate?.toISOString() ?? null,
+      participants: booking.participants,
+      notes: booking.sharedNotes,
+      rescheduleToken: booking.rescheduleToken,
+    },
+  })));
 
   createdBookings.forEach((booking) => {
     outlook.createEvent({
@@ -543,6 +623,176 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     createdCount: createdBookings.length,
     distanceWarning,
   });
+});
+
+router.put("/:id/edit", authenticate, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const booking = await prisma.booking.findUnique({
+    where: { id },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  if (!booking) {
+    res.status(404).json({ error: "Bokning ej hittad" });
+    return;
+  }
+
+  if (!canManageBooking(booking, req)) {
+    res.status(403).json({ error: "Åtkomst nekad" });
+    return;
+  }
+
+  if (req.userRole !== "admin" && !isWithinEditWindow(booking.createdAt)) {
+    res.status(409).json({ error: "Bookings can only be edited within 4 hours after creation." });
+    return;
+  }
+
+  const rawParticipants = req.body.participants ?? booking.participants;
+  const parsedParticipants = Number(rawParticipants);
+  if (!Number.isInteger(parsedParticipants) || parsedParticipants < 1) {
+    res.status(400).json({ error: "Participants måste vara ett heltal större än 0" });
+    return;
+  }
+
+  const nextStartTime = typeof req.body.startTime === "string" ? req.body.startTime : toTimeLabel(booking.date) || "08:00";
+  const nextEndTime = typeof req.body.endTime === "string" ? req.body.endTime : toTimeLabel(booking.endDate) || toTimeLabel(booking.date) || "16:00";
+  const bookingDatePart = formatStockholmDateOnly(booking.date);
+  const nextDate = combineDateAndTime(bookingDatePart, nextStartTime);
+  const nextEndDate = combineDateAndTime(bookingDatePart, nextEndTime);
+
+  if (nextEndDate <= nextDate) {
+    res.status(400).json({ error: "Sluttiden måste vara senare än starttiden" });
+    return;
+  }
+
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, booking.city, id);
+  if (schedulingConflict) {
+    res.status(409).json({ error: schedulingConflict });
+    return;
+  }
+
+  const nextNotes = typeof req.body.notes === "string"
+    ? req.body.notes
+    : typeof req.body.sharedNotes === "string"
+      ? req.body.sharedNotes
+      : booking.sharedNotes;
+
+  const updated = await prisma.booking.update({
+    where: { id },
+    data: {
+      date: nextDate,
+      endDate: nextEndDate,
+      participants: parsedParticipants,
+      sharedNotes: nextNotes,
+    },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  await logBookingChange({
+    bookingId: updated.id,
+    changedById: req.userId!,
+    changeType: "BOOKING_EDITED",
+    oldValue: {
+      startTime: toTimeLabel(booking.date),
+      endTime: toTimeLabel(booking.endDate),
+      participants: booking.participants,
+      notes: booking.sharedNotes,
+    },
+    newValue: {
+      startTime: toTimeLabel(updated.date),
+      endTime: toTimeLabel(updated.endDate),
+      participants: updated.participants,
+      notes: updated.sharedNotes,
+    },
+  });
+
+  res.json(serializeBooking(updated, req));
+});
+
+router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const booking = await prisma.booking.findUnique({
+    where: { id },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  if (!booking) {
+    res.status(404).json({ error: "Bokning ej hittad" });
+    return;
+  }
+
+  if (!canManageBooking(booking, req)) {
+    res.status(403).json({ error: "Åtkomst nekad" });
+    return;
+  }
+
+  if (req.userRole !== "admin" && !booking.rescheduleToken) {
+    res.status(409).json({ error: "This booking has already been moved once and cannot be moved again." });
+    return;
+  }
+
+  const nextDateValue = typeof req.body.date === "string" ? req.body.date : "";
+  if (!nextDateValue) {
+    res.status(400).json({ error: "Datum krävs för att flytta bokningen" });
+    return;
+  }
+
+  const nextStartTime = toTimeLabel(booking.date) || "08:00";
+  const nextEndTime = toTimeLabel(booking.endDate) || toTimeLabel(booking.date) || "16:00";
+  const nextDate = combineDateAndTime(nextDateValue, nextStartTime);
+  const nextEndDate = combineDateAndTime(nextDateValue, nextEndTime);
+
+  const blockingPeriod = await findBlockingPeriodForDate(nextDate);
+  if (blockingPeriod) {
+    res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
+    return;
+  }
+
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, booking.city, id);
+  if (schedulingConflict) {
+    res.status(409).json({ error: schedulingConflict });
+    return;
+  }
+
+  const updated = await prisma.booking.update({
+    where: { id },
+    data: {
+      date: nextDate,
+      endDate: nextEndDate,
+      rescheduleToken: req.userRole === "admin" ? booking.rescheduleToken : false,
+    },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  await logBookingChange({
+    bookingId: updated.id,
+    changedById: req.userId!,
+    changeType: "BOOKING_MOVED",
+    oldValue: {
+      date: booking.date.toISOString(),
+      endDate: booking.endDate?.toISOString() ?? null,
+      rescheduleToken: booking.rescheduleToken,
+    },
+    newValue: {
+      date: updated.date.toISOString(),
+      endDate: updated.endDate?.toISOString() ?? null,
+      rescheduleToken: updated.rescheduleToken,
+    },
+  });
+
+  res.json(serializeBooking(updated, req));
 });
 
 // Get all bookings for all authenticated users
@@ -610,6 +860,11 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
 
   if (!canManageBooking(booking, req)) {
     res.status(403).json({ error: "Åtkomst nekad" });
+    return;
+  }
+
+  if (req.userRole !== "admin") {
+    res.status(403).json({ error: "Customers must use the dedicated edit and move booking actions." });
     return;
   }
 

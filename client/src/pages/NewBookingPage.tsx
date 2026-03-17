@@ -30,6 +30,7 @@ export default function NewBookingPage() {
     startTime: "08:00",
     endTime: "16:00",
     city: "",
+    participants: "1",
     isPrivate: false,
     courseId: "",
     customCourse: "",
@@ -224,6 +225,18 @@ export default function NewBookingPage() {
             <label className="label">Sluttid</label>
             <input type="time" value={form.endTime} onChange={(e) => update("endTime", e.target.value)} required className="input" />
           </div>
+        </div>
+
+        <div>
+          <label className="label">Deltagare</label>
+          <input
+            type="number"
+            min="1"
+            value={form.participants}
+            onChange={(e) => update("participants", e.target.value)}
+            required
+            className="input"
+          />
         </div>
 
         {isAdmin && (

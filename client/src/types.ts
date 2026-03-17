@@ -20,6 +20,9 @@ export interface Booking {
   date: string;
   endDate: string | null;
   city: string;
+  participants: number;
+  notes?: string;
+  rescheduleToken: boolean;
   isPrivate?: boolean;
   sharedNotes: string;
   privateNotes?: string;
@@ -34,6 +37,9 @@ export interface Booking {
   latestChatAt?: string | null;
   displayTitle?: string;
   canAccessChat?: boolean;
+  canEditBookingFields?: boolean;
+  canMoveBooking?: boolean;
+  editWindowEndsAt?: string;
 }
 
 export interface BlockingPeriod {

@@ -13,6 +13,7 @@ type BookingFormState = {
   date: string;
   startTime: string;
   endTime: string;
+  participants: string;
   city: string;
   isPrivate: boolean;
   courseId: string;
@@ -71,6 +72,7 @@ function toFormState(booking: Booking): BookingFormState {
     date: toDateInput(booking.date),
     startTime: toTimeInput(booking.date) || "08:00",
     endTime: toTimeInput(booking.endDate) || "16:00",
+    participants: String(booking.participants ?? 1),
     city: booking.city,
     isPrivate: Boolean(booking.isPrivate),
     courseId: booking.courseId,
@@ -97,6 +99,7 @@ export default function BookingPage() {
     date: "",
     startTime: "08:00",
     endTime: "16:00",
+    participants: "1",
     city: "",
     isPrivate: false,
     courseId: "",
@@ -105,13 +108,16 @@ export default function BookingPage() {
     privateNotes: "",
   });
   const [editMode, setEditMode] = useState(false);
+  const [moveMode, setMoveMode] = useState(false);
+  const [moveDate, setMoveDate] = useState("");
   const [useCustomCourse, setUseCustomCourse] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
-  const canEditBooking = isAdmin || booking?.clientId === user?.id;
+  const isOwner = booking?.clientId === user?.id;
+  const canDirectlySaveNotes = isAdmin;
 
   useEffect(() => {
     const locationState = location.state as { distanceWarning?: string } | null;
@@ -125,6 +131,7 @@ export default function BookingPage() {
     api.get<Booking>(`/bookings/${id}`).then((b) => {
       setBooking(b);
       setForm(toFormState(b));
+      setMoveDate(toDateInput(b.date));
       setUseCustomCourse(Boolean(b.customCourse));
     });
     if (isAdmin) {
@@ -215,11 +222,66 @@ export default function BookingPage() {
     }
   };
 
+  const saveClientEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    setWarning("");
+
+    try {
+      const updated = await api.put<Booking>(`/bookings/${id}/edit`, {
+        startTime: form.startTime,
+        endTime: form.endTime,
+        participants: Number(form.participants),
+        notes: form.sharedNotes,
+      });
+
+      setBooking(updated);
+      setForm(toFormState(updated));
+      setEditMode(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte uppdatera bokningen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const submitMoveBooking = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    setWarning("");
+
+    try {
+      const updated = await api.put<Booking>(`/bookings/${id}/move`, { date: moveDate });
+      setBooking(updated);
+      setForm(toFormState(updated));
+      setMoveDate(toDateInput(updated.date));
+      setMoveMode(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte flytta bokningen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const cancelEditing = () => {
     if (!booking) return;
     setForm(toFormState(booking));
+    setMoveDate(toDateInput(booking.date));
     setUseCustomCourse(Boolean(booking.customCourse));
     setEditMode(false);
+    setMoveMode(false);
     setError("");
     setWarning("");
   };
@@ -288,7 +350,7 @@ export default function BookingPage() {
             <span className="badge badge-info self-start max-w-full">
               {booking.client.company || booking.client.name}
             </span>
-            {isAdmin && !editMode && (
+            {isAdmin && !editMode && !moveMode && (
               <div className="flex flex-col gap-2 self-start w-full sm:w-auto">
                 <button onClick={() => setEditMode(true)} className="btn-primary w-full sm:w-auto">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -306,6 +368,26 @@ export default function BookingPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673A2.25 2.25 0 0 1 15.916 21H8.084a2.25 2.25 0 0 1-2.244-2.327L4.772 5.79m14.456 0A48.108 48.108 0 0 0 15.75 5.25m3.478.54a48.11 48.11 0 0 1-7.5 0m7.5 0V4.875c0-1.026-.79-1.891-1.816-1.966A52.816 52.816 0 0 0 12 2.25c-1.159 0-2.312.04-3.462.118-1.026.075-1.816.94-1.816 1.966v.915m7.5 0a48.667 48.667 0 0 1-7.5 0" />
                   </svg>
                   {deleting ? "Tar bort..." : "Ta bort bokningen"}
+                </button>
+              </div>
+            )}
+            {!isAdmin && isOwner && !editMode && !moveMode && (
+              <div className="flex flex-col gap-2 self-start w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  disabled={!booking.canEditBookingFields}
+                  className="btn-primary w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Edit Booking
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMoveMode(true)}
+                  disabled={!booking.canMoveBooking}
+                  className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-600 transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Move Booking
                 </button>
               </div>
             )}
@@ -459,8 +541,75 @@ export default function BookingPage() {
                   )}
                 </div>
               </form>
+            ) : editMode && isOwner ? (
+              <form onSubmit={saveClientEdit} className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Start time</label>
+                    <input type="time" value={form.startTime} onChange={(e) => updateForm("startTime", e.target.value)} required className="input" />
+                  </div>
+                  <div>
+                    <label className="label">End time</label>
+                    <input type="time" value={form.endTime} onChange={(e) => updateForm("endTime", e.target.value)} required className="input" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Participants</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.participants}
+                    onChange={(e) => updateForm("participants", e.target.value)}
+                    required
+                    className="input"
+                  />
+                </div>
+
+                <div>
+                  <label className="label">Notes</label>
+                  <textarea value={form.sharedNotes} onChange={(e) => updateForm("sharedNotes", e.target.value)} rows={3} className="input resize-none" />
+                </div>
+
+                <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 px-4 py-3 text-sm text-brand-500">
+                  Bookings can only be edited within 4 hours after creation.
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
+                    {saving ? "Saving..." : "Save Booking"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="px-4 py-2 rounded-xl border border-surface-border text-brand-500 hover:text-brand-700 hover:border-brand-200 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : moveMode && isOwner ? (
+              <form onSubmit={submitMoveBooking} className="space-y-5">
+                <div>
+                  <label className="label">New date</label>
+                  <input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} required className="input" />
+                </div>
+
+                <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 px-4 py-3 text-sm text-brand-500">
+                  This booking can only be moved one time.
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
+                    {saving ? "Moving..." : "Move Booking"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="px-4 py-2 rounded-xl border border-surface-border text-brand-500 hover:text-brand-700 hover:border-brand-200 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Booking ID</p>
+                  <p className="font-medium text-brand-700 break-all">{booking.id}</p>
+                </div>
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Datum</p>
                   <p className="font-medium text-brand-700">{formatStockholmShortDate(booking.date)}</p>
@@ -472,6 +621,10 @@ export default function BookingPage() {
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Ort</p>
                   <p className="font-medium text-brand-700">{booking.city}</p>
+                </div>
+                <div>
+                  <p className="text-brand-400 text-xs mb-0.5">Participants</p>
+                  <p className="font-medium text-brand-700">{booking.participants}</p>
                 </div>
                 {booking.isPrivate && isAdmin && (
                   <div>
@@ -496,7 +649,7 @@ export default function BookingPage() {
           </div>
 
           {/* Shared Notes */}
-          <div className={`card p-6 ${editMode && isAdmin ? "hidden" : ""}`}>
+          <div className={`card p-6 ${((editMode && isAdmin) || moveMode) ? "hidden" : ""}`}>
             <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Anteckningar</h2>
             <div>
               <label className="label">Delade anteckningar (synliga för båda)</label>
@@ -506,7 +659,7 @@ export default function BookingPage() {
                 rows={3}
                 placeholder="Skriv anteckningar här..."
                 className="input resize-none"
-                readOnly={!canEditBooking}
+                readOnly={!canDirectlySaveNotes}
               />
             </div>
 
@@ -529,7 +682,7 @@ export default function BookingPage() {
               </div>
             )}
 
-            {canEditBooking ? (
+            {canDirectlySaveNotes ? (
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
                 <button onClick={saveNotes} disabled={saving} className="btn-primary w-full sm:w-auto disabled:opacity-50">
                   {saving ? "Sparar..." : "Spara anteckningar"}
