@@ -66,10 +66,9 @@ function enumeratePeriodDates(startDateValue: string, endDateValue: string) {
 }
 
 function isDateWithinBlockingPeriod(dateValue: string, period: BlockingPeriod) {
-  const day = new Date(`${dateValue}T00:00:00`);
-  const start = new Date(period.startDate);
-  const endExclusive = new Date(period.endDate);
-  return day >= start && day < endExclusive;
+  const startDate = period.startDate.slice(0, 10);
+  const endExclusiveDate = period.endDate.slice(0, 10);
+  return dateValue >= startDate && dateValue < endExclusiveDate;
 }
 
 function toDateInputValue(date: Date) {
