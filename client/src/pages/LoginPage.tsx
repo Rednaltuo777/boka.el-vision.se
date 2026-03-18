@@ -104,6 +104,12 @@ export default function LoginPage() {
                 Registrera dig här
               </Link>
             </p>
+            <p className="text-sm text-brand-400 mt-2">
+              Superadmin?{" "}
+              <Link to="/superadmin/login" className="text-brand-700 font-medium hover:underline">
+                Använd superadmin-inloggningen
+              </Link>
+            </p>
           </div>
         </div>
       </div>

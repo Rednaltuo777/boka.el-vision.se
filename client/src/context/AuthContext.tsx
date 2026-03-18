@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  superadminLogin: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
 }
@@ -39,10 +40,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await api.post<{ token: string; user: User }>("/auth/login", { email, password });
+  const authenticateWithRoute = async (path: string, email: string, password: string) => {
+    const res = await api.post<{ token: string; user: User }>(path, { email, password });
     localStorage.setItem("token", res.token);
     setUser(res.user);
+  };
+
+  const login = async (email: string, password: string) => {
+    await authenticateWithRoute("/auth/login", email, password);
+  };
+
+  const superadminLogin = async (email: string, password: string) => {
+    await authenticateWithRoute("/auth/superadmin/login", email, password);
   };
 
   const register = async (data: RegisterData) => {
@@ -57,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, superadminLogin, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
 import { getOpenRouteServiceDistanceKm, getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
-import { authenticate, requireAdmin, AuthRequest } from "../middleware/auth";
+import { authenticate, requireAdmin, AuthRequest, hasAdminAccess } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
 const router = Router();
@@ -73,7 +73,7 @@ function createStockholmDate(dateValue: string, timeValue: string): Date {
 }
 
 function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
-  return req.userRole === "admin" || booking.clientId === req.userId;
+  return hasAdminAccess(req.userRole) || booking.clientId === req.userId;
 }
 
 function isWithinEditWindow(createdAt: Date) {
@@ -85,7 +85,7 @@ function canEditBookingFields(booking: { clientId: string; createdAt: Date }, re
     return false;
   }
 
-  if (req.userRole === "admin") {
+  if (hasAdminAccess(req.userRole)) {
     return true;
   }
 
@@ -97,7 +97,7 @@ function canMoveBooking(booking: { clientId: string; rescheduleToken: boolean },
     return false;
   }
 
-  if (req.userRole === "admin") {
+  if (hasAdminAccess(req.userRole)) {
     return true;
   }
 
@@ -159,7 +159,7 @@ function serializeBooking(booking: any, req: AuthRequest) {
     client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "", logoUrl: null } : booking.client,
     city: isMaskedPrivate ? "Privat" : booking.city,
     sharedNotes: isMaskedPrivate ? "" : booking.sharedNotes,
-    privateNotes: req.userRole === "admin" && !isMaskedPrivate ? booking.privateNotes : undefined,
+    privateNotes: hasAdminAccess(req.userRole) && !isMaskedPrivate ? booking.privateNotes : undefined,
     hasUnread: isOwnerOrAdmin ? Boolean(booking.hasUnread) : false,
     latestChatAt: isOwnerOrAdmin ? booking.latestChatAt : null,
     displayTitle: isMaskedPrivate ? "Privat" : toBookingTitle(booking, req),
@@ -333,14 +333,17 @@ function toTimeLabel(dateValue: Date | null): string | null {
 }
 
 function getBlockingPeriodLabel(type: string): string {
-  return type === "vacation" ? "semester" : "spärrad period";
+  if (type === "vacation") return "semester";
+  if (type === "private") return "privat period";
+  return "spärrad period";
 }
 
-async function findBlockingPeriodForDate(dateValue: Date) {
+async function findBlockingPeriodForDate(dateValue: Date, userRole?: string) {
   return prisma.blockingPeriod.findFirst({
     where: {
       startDate: { lt: endOfDay(dateValue) },
       endDate: { gt: startOfDay(dateValue) },
+      ...(hasAdminAccess(userRole) ? { type: { not: "private" } } : {}),
     },
     orderBy: { startDate: "asc" },
   });
@@ -492,15 +495,15 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const lastDate = req.userRole === "admin" && dateTo ? dateTo : date;
-  const selectedDates = req.userRole === "admin" ? buildDateRange(date, lastDate) : [date];
+  const lastDate = hasAdminAccess(req.userRole) && dateTo ? dateTo : date;
+  const selectedDates = hasAdminAccess(req.userRole) ? buildDateRange(date, lastDate) : [date];
 
   if (selectedDates.length === 0) {
     res.status(400).json({ error: "Ogiltigt datumintervall" });
     return;
   }
 
-  if (req.userRole === "admin") {
+  if (hasAdminAccess(req.userRole)) {
     const firstDate = new Date(`${date}T12:00:00`);
     const lastSelectedDate = new Date(`${lastDate}T12:00:00`);
     if (lastSelectedDate < firstDate) {
@@ -525,7 +528,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const blockingPeriod = await findBlockingPeriodForDate(bookingDate);
+    const blockingPeriod = await findBlockingPeriodForDate(bookingDate, req.userRole);
     if (blockingPeriod) {
       res.status(409).json({ error: `Datumet ${selectedDate} ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
       return;
@@ -566,7 +569,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
         date: combineDateAndTime(selectedDate, startTime),
         endDate: combineDateAndTime(selectedDate, endTime),
         city,
-        isPrivate: req.userRole === "admin" ? Boolean(isPrivate) : false,
+        isPrivate: hasAdminAccess(req.userRole) ? Boolean(isPrivate) : false,
         participants: parsedParticipants,
         rescheduleToken: true,
         courseId,
@@ -645,7 +648,7 @@ router.put("/:id/edit", authenticate, async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  if (req.userRole !== "admin" && !isWithinEditWindow(booking.createdAt)) {
+  if (!hasAdminAccess(req.userRole) && !isWithinEditWindow(booking.createdAt)) {
     res.status(409).json({ error: "Bookings can only be edited within 4 hours after creation." });
     return;
   }
@@ -735,7 +738,7 @@ router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  if (req.userRole !== "admin" && !booking.rescheduleToken) {
+  if (!hasAdminAccess(req.userRole) && !booking.rescheduleToken) {
     res.status(409).json({ error: "This booking has already been moved once and cannot be moved again." });
     return;
   }
@@ -751,7 +754,7 @@ router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) =>
   const nextDate = combineDateAndTime(nextDateValue, nextStartTime);
   const nextEndDate = combineDateAndTime(nextDateValue, nextEndTime);
 
-  const blockingPeriod = await findBlockingPeriodForDate(nextDate);
+  const blockingPeriod = await findBlockingPeriodForDate(nextDate, req.userRole);
   if (blockingPeriod) {
     res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
     return;
@@ -768,7 +771,7 @@ router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) =>
     data: {
       date: nextDate,
       endDate: nextEndDate,
-      rescheduleToken: req.userRole === "admin" ? booking.rescheduleToken : false,
+      rescheduleToken: hasAdminAccess(req.userRole) ? booking.rescheduleToken : false,
     },
     include: {
       course: true,
@@ -815,7 +818,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
     orderBy: { date: "asc" },
   });
 
-  const result = bookings.map((booking) => serializeBooking(withUnreadStatus(booking, req.userId!, req.userRole === "admin"), req));
+  const result = bookings.map((booking) => serializeBooking(withUnreadStatus(booking, req.userId!, hasAdminAccess(req.userRole)), req));
 
   res.json(result);
 });
@@ -846,7 +849,7 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  res.json(serializeBooking(withUnreadStatus(booking, req.userId!, req.userRole === "admin"), req));
+  res.json(serializeBooking(withUnreadStatus(booking, req.userId!, hasAdminAccess(req.userRole)), req));
 });
 
 // Update booking
@@ -863,7 +866,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  if (req.userRole !== "admin") {
+  if (!hasAdminAccess(req.userRole)) {
     res.status(403).json({ error: "Customers must use the dedicated edit and move booking actions." });
     return;
   }
@@ -889,7 +892,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const blockingPeriod = await findBlockingPeriodForDate(nextDate);
+  const blockingPeriod = await findBlockingPeriodForDate(nextDate, req.userRole);
   if (blockingPeriod) {
     res.status(409).json({ error: `Datumet ligger i en ${getBlockingPeriodLabel(blockingPeriod.type)} och kan inte bokas.` });
     return;
@@ -935,11 +938,11 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
   if (date || startTime) data.date = nextDate;
   if (date || startTime || endTime || endDate !== undefined) data.endDate = nextEndDate;
   if (city) data.city = city;
-  if (isPrivate !== undefined && req.userRole === "admin") data.isPrivate = Boolean(isPrivate);
+  if (isPrivate !== undefined && hasAdminAccess(req.userRole)) data.isPrivate = Boolean(isPrivate);
   if (courseId) data.courseId = courseId;
   if (customCourse !== undefined) data.customCourse = customCourse || null;
   if (sharedNotes !== undefined) data.sharedNotes = sharedNotes;
-  if (privateNotes !== undefined && req.userRole === "admin") data.privateNotes = privateNotes;
+  if (privateNotes !== undefined && hasAdminAccess(req.userRole)) data.privateNotes = privateNotes;
 
   const updated = await prisma.booking.update({
     where: { id },

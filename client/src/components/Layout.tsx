@@ -16,6 +16,7 @@ const adminItems = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isAdminLike = user?.role === "admin" || user?.role === "superadmin";
 
   return (
     <div className="min-h-screen flex bg-surface-secondary overflow-x-clip">
@@ -57,10 +58,10 @@ export default function Layout() {
             </NavLink>
           ))}
 
-          {user?.role === "admin" && (
+          {isAdminLike && (
             <>
               <div className="pt-4 pb-2 px-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Admin</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Administration</p>
               </div>
               {adminItems.map((item) => (
                 <NavLink

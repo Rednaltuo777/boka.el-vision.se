@@ -25,19 +25,32 @@ const courses = [
   "KFI – Kontroll före idrifttagning, lågspänning (teori och praktik)",
 ];
 
-async function main() {
-  // Create admin user
-  const hashedPassword = await bcrypt.hash("admin123", 10);
+async function upsertUser(email: string, password: string, name: string, role: "admin" | "superadmin") {
+  const hashedPassword = await bcrypt.hash(password, 10);
+
   await prisma.user.upsert({
-    where: { email: "admin@el-vision.se" },
+    where: { email },
     update: {},
     create: {
-      email: "admin@el-vision.se",
+      email,
       password: hashedPassword,
-      name: "Administratör",
-      role: "admin",
+      name,
+      role,
     },
   });
+}
+
+async function main() {
+  const adminEmail = process.env.ADMIN_EMAIL || "admin@el-vision.se";
+  const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+  const superadminEmail = process.env.SUPERADMIN_EMAIL || (process.env.NODE_ENV !== "production" ? "superadmin@el-vision.se" : "");
+  const superadminPassword = process.env.SUPERADMIN_PASSWORD || (process.env.NODE_ENV !== "production" ? "superadmin123" : "");
+
+  await upsertUser(adminEmail, adminPassword, "Administratör", "admin");
+
+  if (superadminEmail && superadminPassword) {
+    await upsertUser(superadminEmail, superadminPassword, "Superadmin", "superadmin");
+  }
 
   // Seed courses
   for (const name of courses) {
@@ -48,7 +61,7 @@ async function main() {
     });
   }
 
-  console.log("Seed complete: admin user + courses created.");
+  console.log("Seed complete: admin/superadmin users + courses created.");
 }
 
 main()

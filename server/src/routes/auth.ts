@@ -2,10 +2,41 @@ import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
-import { authenticate, AuthRequest } from "../middleware/auth";
+import { authenticate, AuthRequest, UserRole } from "../middleware/auth";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
+
+function toUserRole(role: string): UserRole {
+  return role === "superadmin" || role === "admin" ? role : "client";
+}
+
+function createAuthResponse(user: { id: string; email: string; name: string | null; role: string }) {
+  const role = toUserRole(user.role);
+  const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "7d" });
+
+  return {
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role },
+  };
+}
+
+async function findAuthenticatedUser(email: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.password) {
+    return null;
+  }
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) {
+    return null;
+  }
+
+  return {
+    ...user,
+    role: toUserRole(user.role),
+  };
+}
 
 // Login
 router.post("/login", async (req, res: Response) => {
@@ -15,23 +46,39 @@ router.post("/login", async (req, res: Response) => {
     return;
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.password) {
+  const user = await findAuthenticatedUser(email, password);
+  if (!user) {
     res.status(401).json({ error: "Felaktig e-post eller lösenord" });
     return;
   }
 
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) {
+  if (user.role === "superadmin") {
+    res.status(403).json({ error: "Superadmin måste logga in via superadmin-inloggningen" });
+    return;
+  }
+
+  res.json(createAuthResponse(user));
+});
+
+router.post("/superadmin/login", async (req, res: Response) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    res.status(400).json({ error: "E-post och lösenord krävs" });
+    return;
+  }
+
+  const user = await findAuthenticatedUser(email, password);
+  if (!user) {
     res.status(401).json({ error: "Felaktig e-post eller lösenord" });
     return;
   }
 
-  const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-  res.json({
-    token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
-  });
+  if (user.role !== "superadmin") {
+    res.status(403).json({ error: "Endast superadmin kan använda denna inloggning" });
+    return;
+  }
+
+  res.json(createAuthResponse(user));
 });
 
 // Register (via invitation token)
@@ -66,11 +113,7 @@ router.post("/register", async (req, res: Response) => {
 
   await prisma.invitation.update({ where: { id: invitation.id }, data: { used: true } });
 
-  const jwtToken = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-  res.json({
-    token: jwtToken,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role },
-  });
+  res.json(createAuthResponse(user));
 });
 
 // Get current user

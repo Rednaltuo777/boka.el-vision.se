@@ -35,6 +35,18 @@ export default function ProfilePage() {
     );
   }
 
+  const roleLabel = profile?.role === "superadmin"
+    ? "Superadmin"
+    : profile?.role === "admin"
+      ? "Administratör"
+      : "Uppdragsgivare";
+
+  const roleBadge = profile?.role === "superadmin"
+    ? "badge-superadmin"
+    : profile?.role === "admin"
+      ? "badge-admin"
+      : "badge-info";
+
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <div>
@@ -50,8 +62,8 @@ export default function ProfilePage() {
         <div>
           <p className="font-semibold text-brand-800">{profile.name || "Namnlös"}</p>
           <p className="text-sm text-brand-400">{profile.email}</p>
-          <span className={`badge mt-1 ${profile.role === "admin" ? "badge-admin" : "badge-info"}`}>
-            {profile.role === "admin" ? "Administratör" : "Uppdragsgivare"}
+          <span className={`badge mt-1 ${roleBadge}`}>
+            {roleLabel}
           </span>
         </div>
       </div>

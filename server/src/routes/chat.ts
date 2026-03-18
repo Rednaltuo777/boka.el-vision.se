@@ -1,11 +1,11 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
-import { authenticate, AuthRequest } from "../middleware/auth";
+import { authenticate, AuthRequest, hasAdminAccess } from "../middleware/auth";
 
 const router = Router();
 
 function canAccessChat(booking: { clientId: string }, req: AuthRequest) {
-  return req.userRole === "admin" || booking.clientId === req.userId;
+  return hasAdminAccess(req.userRole) || booking.clientId === req.userId;
 }
 
 // Get chat messages for a booking

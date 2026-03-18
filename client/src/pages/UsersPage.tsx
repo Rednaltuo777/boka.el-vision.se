@@ -16,8 +16,11 @@ function readFileAsDataUrl(file: File) {
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const isAdminLike = user?.role === "admin" || user?.role === "superadmin";
+  const isSuperadmin = user?.role === "superadmin";
   const [users, setUsers] = useState<User[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, User["role"]>>({});
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -25,13 +28,17 @@ export default function UsersPage() {
   const [logoUrl, setLogoUrl] = useState("");
   const [previewLogoUrl, setPreviewLogoUrl] = useState("");
   const [savingLogo, setSavingLogo] = useState(false);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
   const [brokenLogoUserIds, setBrokenLogoUserIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (user?.role !== "admin") return;
-    api.get<User[]>("/users").then(setUsers);
+    if (!isAdminLike) return;
+    api.get<User[]>("/users").then((loadedUsers) => {
+      setUsers(loadedUsers);
+      setRoleDrafts(Object.fromEntries(loadedUsers.map((loadedUser) => [loadedUser.id, loadedUser.role])));
+    });
     api.get<Invitation[]>("/invitations").then(setInvitations);
-  }, [user]);
+  }, [isAdminLike]);
 
   const sendInvitation = async (e: FormEvent) => {
     e.preventDefault();
@@ -126,7 +133,29 @@ export default function UsersPage() {
     }
   };
 
-  if (user?.role !== "admin") {
+  const saveRole = async (userId: string) => {
+    const nextRole = roleDrafts[userId];
+    if (!nextRole) {
+      return;
+    }
+
+    setSavingRoleId(userId);
+    setError("");
+    setMessage("");
+
+    try {
+      const updatedUser = await api.put<User>(`/users/${userId}/role`, { role: nextRole });
+      setUsers((current) => current.map((item) => item.id === userId ? updatedUser : item));
+      setRoleDrafts((current) => ({ ...current, [userId]: updatedUser.role }));
+      setMessage(`Rollen uppdaterades för ${updatedUser.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte uppdatera rollen");
+    } finally {
+      setSavingRoleId(null);
+    }
+  };
+
+  if (!isAdminLike) {
     return (
       <div className="text-center py-20 text-brand-400">
         <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
@@ -237,8 +266,8 @@ export default function UsersPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium text-brand-700 truncate">{u.name || "–"}</p>
-                      <span className={`badge ${u.role === "admin" ? "badge-admin" : "badge-info"}`}>
-                        {u.role === "admin" ? "Admin" : "Uppdragsgivare"}
+                      <span className={`badge ${u.role === "superadmin" ? "badge-superadmin" : u.role === "admin" ? "badge-admin" : "badge-info"}`}>
+                        {u.role === "superadmin" ? "Superadmin" : u.role === "admin" ? "Admin" : "Uppdragsgivare"}
                       </span>
                       {u.logoUrl && (
                         <span className="inline-flex items-center rounded-full bg-accent-50 px-2 py-0.5 text-[11px] font-medium text-accent-700">
@@ -248,7 +277,7 @@ export default function UsersPage() {
                     </div>
                     <p className="text-xs text-brand-400 truncate">{u.company ? `${u.company} · ` : ""}{u.email}</p>
                   </div>
-                  {u.role !== "admin" && (
+                  {u.role === "client" && (
                     <button
                       type="button"
                       onClick={() => startEditingLogo(u)}
@@ -283,7 +312,37 @@ export default function UsersPage() {
                   </div>
                 )}
 
-                {editingUserId === u.id && u.role !== "admin" && (
+                {isSuperadmin && (
+                  <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-brand-700">Rollhantering</p>
+                        <p className="text-xs text-brand-400">Endast superadmin kan ändra roller och utse fler administratörer.</p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                        <select
+                          value={roleDrafts[u.id] || u.role}
+                          onChange={(e) => setRoleDrafts((current) => ({ ...current, [u.id]: e.target.value as User["role"] }))}
+                          className="input min-w-40"
+                        >
+                          <option value="client">Uppdragsgivare</option>
+                          <option value="admin">Admin</option>
+                          <option value="superadmin">Superadmin</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void saveRole(u.id)}
+                          disabled={savingRoleId === u.id || (roleDrafts[u.id] || u.role) === u.role}
+                          className="btn-secondary disabled:opacity-50"
+                        >
+                          {savingRoleId === u.id ? "Sparar..." : "Spara roll"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {editingUserId === u.id && u.role === "client" && (
                   <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-4 space-y-3">
                     <div>
                       <label className="label">Förhandsvisning</label>

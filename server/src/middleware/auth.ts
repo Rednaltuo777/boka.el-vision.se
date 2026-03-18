@@ -3,9 +3,15 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
 
+export type UserRole = "superadmin" | "admin" | "client";
+
 export interface AuthRequest extends Request {
   userId?: string;
-  userRole?: string;
+  userRole?: UserRole;
+}
+
+export function hasAdminAccess(role?: string): role is "superadmin" | "admin" {
+  return role === "superadmin" || role === "admin";
 }
 
 export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -17,7 +23,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 
   try {
     const token = header.slice(7);
-    const payload = jwt.verify(token, JWT_SECRET) as { userId: string; role: string };
+    const payload = jwt.verify(token, JWT_SECRET) as { userId: string; role: UserRole };
     req.userId = payload.userId;
     req.userRole = payload.role;
     next();
@@ -27,8 +33,16 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 }
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
-  if (req.userRole !== "admin") {
+  if (!hasAdminAccess(req.userRole)) {
     res.status(403).json({ error: "Administratörsbehörighet krävs" });
+    return;
+  }
+  next();
+}
+
+export function requireSuperAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (req.userRole !== "superadmin") {
+    res.status(403).json({ error: "Superadminbehörighet krävs" });
     return;
   }
   next();

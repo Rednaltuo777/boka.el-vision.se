@@ -9,12 +9,13 @@ import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import type { BlockingPeriod, Booking } from "../types";
 
-type BlockingPeriodType = "vacation" | "blocked";
+type BlockingPeriodType = "vacation" | "blocked" | "private";
 
 interface BlockingPeriodDraft {
   startDate: string;
   endDate: string;
   type: BlockingPeriodType;
+  customLabel: string;
 }
 
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
@@ -37,7 +38,38 @@ function formatStockholmDate(value: string | Date) {
 }
 
 function getBlockingPeriodLabel(type: BlockingPeriodType) {
-  return type === "vacation" ? "Semester" : "Spärrad för bokning";
+  if (type === "vacation") return "Semester";
+  if (type === "private") return "Privat";
+  return "Spärrad för bokning";
+}
+
+function getAdminBlockingPeriodLabel(period: Pick<BlockingPeriod, "type" | "customLabel" | "displayLabel">) {
+  return period.customLabel?.trim() || period.displayLabel || getBlockingPeriodLabel(period.type);
+}
+
+function enumeratePeriodDates(startDateValue: string, endDateValue: string) {
+  const start = new Date(startDateValue);
+  const endExclusive = new Date(endDateValue);
+  const dates: Array<{ start: string; end: string }> = [];
+
+  for (const cursor = new Date(start); cursor < endExclusive; cursor.setDate(cursor.getDate() + 1)) {
+    const dayStart = new Date(cursor);
+    const dayEnd = new Date(cursor);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    dates.push({
+      start: toDateInputValue(dayStart),
+      end: toDateInputValue(dayEnd),
+    });
+  }
+
+  return dates;
+}
+
+function isDateWithinBlockingPeriod(dateValue: string, period: BlockingPeriod) {
+  const day = new Date(`${dateValue}T00:00:00`);
+  const start = new Date(period.startDate);
+  const endExclusive = new Date(period.endDate);
+  return day >= start && day < endExclusive;
 }
 
 function toDateInputValue(date: Date) {
@@ -55,7 +87,7 @@ function getInclusiveEndDate(selectInfo: DateSelectArg) {
 
 export default function CalendarPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [blockingPeriods, setBlockingPeriods] = useState<BlockingPeriod[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<BlockingPeriodDraft | null>(null);
@@ -112,30 +144,57 @@ export default function CalendarPage() {
         city: b.city,
       },
     })),
-    ...blockingPeriods.map((period) => ({
-      id: period.id,
-      title: getBlockingPeriodLabel(period.type),
-      start: period.startDate.split("T")[0],
-      end: period.endDate.split("T")[0],
-      allDay: true,
-      backgroundColor: period.type === "vacation" ? "#1e6b52" : "#9f1239",
-      borderColor: period.type === "vacation" ? "#1e6b52" : "#9f1239",
-      textColor: "#ffffff",
-      display: "block",
-      extendedProps: {
-        eventType: "blockingPeriod",
-        blockingPeriodType: period.type,
-      },
-    })),
+    ...blockingPeriods.flatMap((period) => {
+      const isMaskedPrivate = period.type === "private" && !isAdmin;
+      const title = isMaskedPrivate ? "Privat" : getAdminBlockingPeriodLabel(period);
+      const backgroundColor = isMaskedPrivate
+        ? "#475569"
+        : period.type === "vacation"
+          ? "#1e6b52"
+          : period.type === "private"
+            ? "#6d28d9"
+            : "#9f1239";
+
+      const commonEventProps = {
+        title,
+        allDay: true,
+        backgroundColor,
+        borderColor: backgroundColor,
+        textColor: "#ffffff",
+        display: "block" as const,
+        extendedProps: {
+          eventType: "blockingPeriod",
+          blockingPeriodType: period.type,
+          periodId: period.id,
+          displayLabel: title,
+        },
+      };
+
+      if (isMaskedPrivate) {
+        return enumeratePeriodDates(period.startDate, period.endDate).map((dateRange) => ({
+          id: `${period.id}:${dateRange.start}`,
+          start: dateRange.start,
+          end: dateRange.end,
+          ...commonEventProps,
+        }));
+      }
+
+      return [{
+        id: period.id,
+        start: period.startDate.split("T")[0],
+        end: period.endDate.split("T")[0],
+        ...commonEventProps,
+      }];
+    }),
   ];
 
   const renderEventContent = (info: EventContentArg) => {
     const eventType = info.event.extendedProps.eventType as "booking" | "blockingPeriod" | undefined;
     if (eventType === "blockingPeriod") {
-      const blockingPeriodType = info.event.extendedProps.blockingPeriodType as BlockingPeriodType;
+      const displayLabel = info.event.extendedProps.displayLabel as string | undefined;
       return (
         <div className="truncate font-medium">
-          {blockingPeriodType === "vacation" ? "Semester" : "Spärrad för bokning"}
+          {displayLabel || getBlockingPeriodLabel(info.event.extendedProps.blockingPeriodType as BlockingPeriodType)}
         </div>
       );
     }
@@ -196,8 +255,8 @@ export default function CalendarPage() {
     }
   };
 
-  const deleteBlockingPeriod = async (id: string, type: BlockingPeriodType) => {
-    const confirmed = window.confirm(`Ta bort ${getBlockingPeriodLabel(type).toLowerCase()}?`);
+  const deleteBlockingPeriod = async (id: string, type: BlockingPeriodType, label?: string) => {
+    const confirmed = window.confirm(`Ta bort ${(label || getBlockingPeriodLabel(type)).toLowerCase()}?`);
     if (!confirmed) {
       return;
     }
@@ -298,6 +357,7 @@ export default function CalendarPage() {
               startDate: selectionInfo.startStr,
               endDate: getInclusiveEndDate(selectionInfo),
               type: "vacation",
+              customLabel: "",
             });
           }}
           eventContent={renderEventContent}
@@ -308,13 +368,24 @@ export default function CalendarPage() {
                 return;
               }
 
-              void deleteBlockingPeriod(info.event.id, info.event.extendedProps.blockingPeriodType as BlockingPeriodType);
+              void deleteBlockingPeriod(
+                (info.event.extendedProps.periodId as string | undefined) || info.event.id,
+                info.event.extendedProps.blockingPeriodType as BlockingPeriodType,
+                info.event.extendedProps.displayLabel as string | undefined,
+              );
               return;
             }
 
             navigate(`/bookings/${info.event.id}`);
           }}
-          dateClick={(info) => navigate(`/bookings/new?date=${info.dateStr}`)}
+          dateClick={(info) => {
+            const hasBlockingPeriod = blockingPeriods.some((period) => isDateWithinBlockingPeriod(info.dateStr, period));
+            if (!isAdmin && hasBlockingPeriod) {
+              return;
+            }
+
+            navigate(`/bookings/new?date=${info.dateStr}`);
+          }}
           height="auto"
           dayMaxEvents={isMobile ? 2 : 3}
           buttonText={{
@@ -346,6 +417,32 @@ export default function CalendarPage() {
             )}
 
             <div>
+              <label className="label">Datum från</label>
+              <input
+                type="date"
+                value={selectedPeriod.startDate}
+                onChange={(e) => setSelectedPeriod((current) => {
+                  if (!current) return current;
+                  const nextStartDate = e.target.value;
+                  const nextEndDate = current.endDate < nextStartDate ? nextStartDate : current.endDate;
+                  return { ...current, startDate: nextStartDate, endDate: nextEndDate };
+                })}
+                className="input"
+              />
+            </div>
+
+            <div>
+              <label className="label">Datum till</label>
+              <input
+                type="date"
+                value={selectedPeriod.endDate}
+                min={selectedPeriod.startDate}
+                onChange={(e) => setSelectedPeriod((current) => current ? { ...current, endDate: e.target.value } : current)}
+                className="input"
+              />
+            </div>
+
+            <div>
               <label className="label">Typ av period</label>
               <select
                 value={selectedPeriod.type}
@@ -354,8 +451,25 @@ export default function CalendarPage() {
               >
                 <option value="vacation">Semester</option>
                 <option value="blocked">Spärra för bokningar</option>
+                <option value="private">Privat med egen text</option>
               </select>
             </div>
+
+            {selectedPeriod.type === "private" && (
+              <div>
+                <label className="label">Egen text för admin/superadmin</label>
+                <input
+                  type="text"
+                  value={selectedPeriod.customLabel}
+                  onChange={(e) => setSelectedPeriod((current) => current ? { ...current, customLabel: e.target.value } : current)}
+                  placeholder="Till exempel Konferens eller Intern planering"
+                  className="input"
+                />
+                <p className="mt-2 text-xs text-brand-400">
+                  Vanliga användare ser bara texten Privat och kan inte boka dessa dagar. Admin och superadmin ser din egen text.
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3">
               <button

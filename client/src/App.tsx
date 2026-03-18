@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
+import SuperadminLoginPage from "./pages/SuperadminLoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import CalendarPage from "./pages/CalendarPage";
 import BookingPage from "./pages/BookingPage";
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route path="/superadmin/login" element={user ? <Navigate to="/" /> : <SuperadminLoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
         path="/"

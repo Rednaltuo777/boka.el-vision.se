@@ -9,7 +9,7 @@ const PRIVATE_OPTION = "__private__";
 export default function NewBookingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const [searchParams] = useSearchParams();
   const [courses, setCourses] = useState<Course[]>([]);
   const [error, setError] = useState("");

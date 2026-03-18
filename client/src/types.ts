@@ -6,7 +6,7 @@ export interface User {
   logoUrl?: string | null;
   department: string | null;
   phone: string | null;
-  role: "admin" | "client";
+  role: "superadmin" | "admin" | "client";
 }
 
 export interface Course {
@@ -46,7 +46,9 @@ export interface BlockingPeriod {
   id: string;
   startDate: string;
   endDate: string;
-  type: "vacation" | "blocked";
+  type: "vacation" | "blocked" | "private";
+  customLabel?: string | null;
+  displayLabel?: string;
   createdAt: string;
   updatedAt: string;
   createdById: string;
