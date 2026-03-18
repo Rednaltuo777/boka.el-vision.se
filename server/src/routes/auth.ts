@@ -38,6 +38,10 @@ async function findAuthenticatedUser(email: string, password: string) {
   };
 }
 
+function isValidPassword(password: string) {
+  return typeof password === "string" && password.trim().length >= 8;
+}
+
 // Login
 router.post("/login", async (req, res: Response) => {
   const { email, password } = req.body;
@@ -127,6 +131,40 @@ router.get("/me", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
   res.json(user);
+});
+
+router.post("/change-password", authenticate, async (req: AuthRequest, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "Nuvarande lösenord och nytt lösenord krävs" });
+    return;
+  }
+
+  if (!isValidPassword(newPassword)) {
+    res.status(400).json({ error: "Det nya lösenordet måste vara minst 8 tecken" });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!user || !user.password) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid) {
+    res.status(401).json({ error: "Nuvarande lösenord är felaktigt" });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { password: hashedPassword },
+  });
+
+  res.json({ success: true });
 });
 
 export default router;

@@ -23,6 +23,10 @@ export default function SettingsPage() {
   const [courseSuccess, setCourseSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Check for OAuth callback results
@@ -154,6 +158,36 @@ export default function SettingsPage() {
     }
   };
 
+  const changePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError("Det nya lösenordet måste vara minst 8 tecken.");
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("Det nya lösenordet och bekräftelsen matchar inte.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await api.post<{ success: boolean }>("/auth/change-password", {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordSuccess("Lösenordet har uppdaterats.");
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Kunde inte byta lösenord");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -176,6 +210,59 @@ export default function SettingsPage() {
           </p>
         </div>
       )}
+
+      <div className="card">
+        <div className="p-6 border-b border-surface-border/50">
+          <h2 className="text-lg font-semibold text-brand-800">Byt lösenord</h2>
+          <p className="text-sm text-brand-400">Gäller dig som är inloggad, oavsett roll.</p>
+        </div>
+
+        <form onSubmit={changePassword} className="p-6 space-y-4">
+          <div>
+            <label className="label">Nuvarande lösenord</label>
+            <input
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))}
+              className="input"
+              autoComplete="current-password"
+            />
+          </div>
+
+          <div>
+            <label className="label">Nytt lösenord</label>
+            <input
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))}
+              className="input"
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div>
+            <label className="label">Bekräfta nytt lösenord</label>
+            <input
+              type="password"
+              value={passwordForm.confirmPassword}
+              onChange={(e) => setPasswordForm((current) => ({ ...current, confirmPassword: e.target.value }))}
+              className="input"
+              autoComplete="new-password"
+            />
+          </div>
+
+          {passwordError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{passwordError}</div>
+          )}
+          {passwordSuccess && (
+            <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-700">{passwordSuccess}</div>
+          )}
+
+          <button type="submit" disabled={passwordLoading} className="btn-primary disabled:opacity-50">
+            {passwordLoading ? "Uppdaterar..." : "Byt lösenord"}
+          </button>
+        </form>
+      </div>
 
       {/* Outlook Calendar Integration */}
       <div className="card">

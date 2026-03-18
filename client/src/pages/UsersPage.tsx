@@ -29,6 +29,8 @@ export default function UsersPage() {
   const [previewLogoUrl, setPreviewLogoUrl] = useState("");
   const [savingLogo, setSavingLogo] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+  const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
+  const [savingPasswordId, setSavingPasswordId] = useState<string | null>(null);
   const [brokenLogoUserIds, setBrokenLogoUserIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -152,6 +154,29 @@ export default function UsersPage() {
       setError(err instanceof Error ? err.message : "Kunde inte uppdatera rollen");
     } finally {
       setSavingRoleId(null);
+    }
+  };
+
+  const savePassword = async (targetUser: User) => {
+    const nextPassword = (passwordDrafts[targetUser.id] || "").trim();
+    if (nextPassword.length < 8) {
+      setError("Lösenordet måste vara minst 8 tecken.");
+      setMessage("");
+      return;
+    }
+
+    setSavingPasswordId(targetUser.id);
+    setError("");
+    setMessage("");
+
+    try {
+      await api.put<{ success: boolean }>(`/users/${targetUser.id}/password`, { password: nextPassword });
+      setPasswordDrafts((current) => ({ ...current, [targetUser.id]: "" }));
+      setMessage(`Nytt lösenord har sparats för ${targetUser.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte uppdatera lösenordet");
+    } finally {
+      setSavingPasswordId(null);
     }
   };
 
@@ -336,6 +361,29 @@ export default function UsersPage() {
                           className="btn-secondary disabled:opacity-50"
                         >
                           {savingRoleId === u.id ? "Sparar..." : "Spara roll"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-surface-border pt-3 space-y-2">
+                      <p className="text-sm font-medium text-brand-700">Sätt nytt lösenord</p>
+                      <p className="text-xs text-brand-400">Superadmin kan sätta ett nytt lösenord, men kan inte se befintliga lösenord eftersom de lagras hashade.</p>
+                      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                        <input
+                          type="password"
+                          value={passwordDrafts[u.id] || ""}
+                          onChange={(e) => setPasswordDrafts((current) => ({ ...current, [u.id]: e.target.value }))}
+                          placeholder="Minst 8 tecken"
+                          className="input"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void savePassword(u)}
+                          disabled={savingPasswordId === u.id || !(passwordDrafts[u.id] || "").trim()}
+                          className="btn-secondary disabled:opacity-50"
+                        >
+                          {savingPasswordId === u.id ? "Sparar..." : "Sätt lösenord"}
                         </button>
                       </div>
                     </div>

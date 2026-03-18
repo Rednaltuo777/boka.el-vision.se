@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma";
 import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest, UserRole } from "../middleware/auth";
 
@@ -77,6 +78,34 @@ router.put("/:id", authenticate, requireAdmin, async (req: AuthRequest, res: Res
   });
 
   res.json(user);
+});
+
+router.put("/:id/password", authenticate, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const nextPassword = String(req.body.password || "").trim();
+
+  if (nextPassword.length < 8) {
+    res.status(400).json({ error: "Lösenordet måste vara minst 8 tecken" });
+    return;
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!existingUser) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(nextPassword, 10);
+  await prisma.user.update({
+    where: { id },
+    data: { password: hashedPassword },
+  });
+
+  res.json({ success: true });
 });
 
 export default router;
