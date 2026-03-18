@@ -354,13 +354,13 @@ export default function UsersPage() {
                     </div>
                     <p className="text-xs text-brand-400 truncate">{u.company ? `${u.company} · ` : ""}{u.email}</p>
                   </div>
-                  {u.role === "client" && (
+                  {(u.role === "client" || u.id === user?.id) && (
                     <button
                       type="button"
                       onClick={() => startEditingLogo(u)}
                       className="inline-flex items-center justify-center rounded-xl border border-surface-border px-3 py-2 text-xs font-medium text-brand-500 hover:bg-surface-secondary self-start sm:self-auto"
                     >
-                      Logotyp
+                      {u.id === user?.id ? "Min logotyp" : "Logotyp"}
                     </button>
                   )}
                 </div>
