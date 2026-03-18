@@ -82,6 +82,11 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 className="input"
               />
+              <div className="mt-2 text-right">
+                <Link to="/forgot-password" className="text-sm text-brand-700 font-medium hover:underline">
+                  Glömt lösenord?
+                </Link>
+              </div>
             </div>
 
             <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-50">

@@ -1,15 +1,25 @@
 import { Router, Response } from "express";
 import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma";
+import { createPasswordResetToken, generateTemporaryPassword, sendPasswordResetEmail } from "../lib/passwords";
 import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest, UserRole } from "../middleware/auth";
 
 const router = Router();
 const USER_ROLES: UserRole[] = ["client", "admin", "superadmin"];
 
+function canManageVisibleUser(requesterRole?: UserRole, targetRole?: string) {
+  if (requesterRole === "superadmin") {
+    return true;
+  }
+
+  return targetRole !== "superadmin";
+}
+
 // List all users (admin only)
-router.get("/", authenticate, requireAdmin, async (_req: AuthRequest, res: Response) => {
+router.get("/", authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   const users = await prisma.user.findMany({
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, createdAt: true },
+    where: req.userRole === "superadmin" ? undefined : { role: { not: "superadmin" } },
+    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
   res.json(users);
@@ -21,7 +31,7 @@ router.put("/me", authenticate, async (req: AuthRequest, res: Response) => {
   const user = await prisma.user.update({
     where: { id: req.userId },
     data: { name, company, logoUrl, department, phone },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true },
+    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true },
   });
   res.json(user);
 });
@@ -61,7 +71,7 @@ router.put("/:id/role", authenticate, requireSuperAdmin, async (req: AuthRequest
   const user = await prisma.user.update({
     where: { id },
     data: { role: nextRole },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, createdAt: true },
+    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
   });
 
   res.json(user);
@@ -71,10 +81,20 @@ router.put("/:id", authenticate, requireAdmin, async (req: AuthRequest, res: Res
   const id = req.params.id as string;
   const { logoUrl } = req.body;
 
+  const existingUser = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, role: true },
+  });
+
+  if (!existingUser || !canManageVisibleUser(req.userRole, existingUser.role)) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
   const user = await prisma.user.update({
     where: { id },
     data: { logoUrl: typeof logoUrl === "string" ? logoUrl.trim() || null : null },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, createdAt: true },
+    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
   });
 
   res.json(user);
@@ -102,8 +122,81 @@ router.put("/:id/password", authenticate, requireSuperAdmin, async (req: AuthReq
   const hashedPassword = await bcrypt.hash(nextPassword, 10);
   await prisma.user.update({
     where: { id },
-    data: { password: hashedPassword },
+    data: { password: hashedPassword, forcePasswordChange: true },
   });
+
+  res.json({ success: true });
+});
+
+router.post("/:id/temporary-password", authenticate, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+  await prisma.user.update({
+    where: { id },
+    data: {
+      password: hashedPassword,
+      forcePasswordChange: true,
+      resetPasswordTokenHash: null,
+      resetPasswordExpiresAt: null,
+    },
+  });
+
+  res.json({ success: true, temporaryPassword });
+});
+
+router.put("/:id/force-password-change", authenticate, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const forcePasswordChange = Boolean(req.body.forcePasswordChange);
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id },
+    data: { forcePasswordChange },
+  });
+
+  res.json({ success: true, forcePasswordChange });
+});
+
+router.post("/:id/password-reset-link", authenticate, requireSuperAdmin, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true },
+  });
+
+  if (!user) {
+    res.status(404).json({ error: "Användare ej hittad" });
+    return;
+  }
+
+  const { resetUrl } = await createPasswordResetToken(user.id);
+  const emailSent = await sendPasswordResetEmail({ email: user.email, resetUrl });
+
+  if (!emailSent) {
+    res.status(503).json({ error: "E-postutskick är inte konfigurerat på servern" });
+    return;
+  }
 
   res.json({ success: true });
 });

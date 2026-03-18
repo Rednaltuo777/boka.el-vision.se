@@ -8,6 +8,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   superadminLogin: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
 }
 
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
-      api
+      void api
         .get<User>("/auth/me")
         .then(setUser)
         .catch(() => localStorage.removeItem("token"))
@@ -39,6 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  const refreshUser = async () => {
+    const currentUser = await api.get<User>("/auth/me");
+    setUser(currentUser);
+  };
 
   const authenticateWithRoute = async (path: string, email: string, password: string) => {
     const res = await api.post<{ token: string; user: User }>(path, { email, password });
@@ -66,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, superadminLogin, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, superadminLogin, register, refreshUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

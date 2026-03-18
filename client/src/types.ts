@@ -7,6 +7,7 @@ export interface User {
   department: string | null;
   phone: string | null;
   role: "superadmin" | "admin" | "client";
+  forcePasswordChange?: boolean;
 }
 
 export interface Course {

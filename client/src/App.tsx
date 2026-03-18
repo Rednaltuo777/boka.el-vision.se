@@ -3,6 +3,9 @@ import { useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import SuperadminLoginPage from "./pages/SuperadminLoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ForcePasswordChangePage from "./pages/ForcePasswordChangePage";
 import RegisterPage from "./pages/RegisterPage";
 import CalendarPage from "./pages/CalendarPage";
 import BookingPage from "./pages/BookingPage";
@@ -15,7 +18,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen">Laddar...</div>;
   if (!user) return <Navigate to="/login" />;
+  if (user.forcePasswordChange) return <Navigate to="/force-password-change" />;
   return <>{children}</>;
+}
+
+function ForcedPasswordChangeRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex items-center justify-center h-screen">Laddar...</div>;
+  if (!user) return <Navigate to="/login" />;
+  if (!user.forcePasswordChange) return <Navigate to="/" />;
+  return <ForcePasswordChangePage />;
 }
 
 export default function App() {
@@ -27,6 +39,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
       <Route path="/superadmin/login" element={user ? <Navigate to="/" /> : <SuperadminLoginPage />} />
+      <Route path="/forgot-password" element={user && !user.forcePasswordChange ? <Navigate to="/" /> : <ForgotPasswordPage />} />
+      <Route path="/reset-password" element={user && !user.forcePasswordChange ? <Navigate to="/" /> : <ResetPasswordPage />} />
+      <Route path="/force-password-change" element={<ForcedPasswordChangeRoute />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
         path="/"

@@ -31,6 +31,9 @@ export default function UsersPage() {
   const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [savingPasswordId, setSavingPasswordId] = useState<string | null>(null);
+  const [forcingPasswordId, setForcingPasswordId] = useState<string | null>(null);
+  const [sendingResetLinkId, setSendingResetLinkId] = useState<string | null>(null);
+  const [temporaryPasswords, setTemporaryPasswords] = useState<Record<string, string>>({});
   const [brokenLogoUserIds, setBrokenLogoUserIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -177,6 +180,55 @@ export default function UsersPage() {
       setError(err instanceof Error ? err.message : "Kunde inte uppdatera lösenordet");
     } finally {
       setSavingPasswordId(null);
+    }
+  };
+
+  const generateTemporaryPassword = async (targetUser: User) => {
+    setSavingPasswordId(targetUser.id);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await api.post<{ success: boolean; temporaryPassword: string }>(`/users/${targetUser.id}/temporary-password`, {});
+      setTemporaryPasswords((current) => ({ ...current, [targetUser.id]: result.temporaryPassword }));
+      setMessage(`Temporärt lösenord genererades för ${targetUser.email}. Användaren måste byta lösenord vid nästa inloggning.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte generera tillfälligt lösenord");
+    } finally {
+      setSavingPasswordId(null);
+    }
+  };
+
+  const forcePasswordChange = async (targetUser: User, forcePasswordChange: boolean) => {
+    setForcingPasswordId(targetUser.id);
+    setError("");
+    setMessage("");
+
+    try {
+      await api.put<{ success: boolean; forcePasswordChange: boolean }>(`/users/${targetUser.id}/force-password-change`, { forcePasswordChange });
+      setUsers((current) => current.map((item) => item.id === targetUser.id ? { ...item, forcePasswordChange } : item));
+      setMessage(forcePasswordChange
+        ? `Användaren ${targetUser.email} måste byta lösenord vid nästa inloggning.`
+        : `Kravet på lösenordsbyte togs bort för ${targetUser.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte uppdatera lösenordskravet");
+    } finally {
+      setForcingPasswordId(null);
+    }
+  };
+
+  const sendResetLink = async (targetUser: User) => {
+    setSendingResetLinkId(targetUser.id);
+    setError("");
+    setMessage("");
+
+    try {
+      await api.post<{ success: boolean }>(`/users/${targetUser.id}/password-reset-link`, {});
+      setMessage(`Återställningslänk skickades till ${targetUser.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte skicka återställningslänk");
+    } finally {
+      setSendingResetLinkId(null);
     }
   };
 
@@ -386,6 +438,43 @@ export default function UsersPage() {
                           {savingPasswordId === u.id ? "Sparar..." : "Sätt lösenord"}
                         </button>
                       </div>
+                      <label className="flex items-center gap-2 text-sm text-brand-500 pt-1">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(u.forcePasswordChange)}
+                          onChange={(e) => void forcePasswordChange(u, e.target.checked)}
+                          disabled={forcingPasswordId === u.id}
+                          className="rounded border-brand-300 text-brand-700 focus:ring-brand-400"
+                        />
+                        Tvinga lösenordsbyte vid nästa inloggning
+                      </label>
+                    </div>
+
+                    <div className="border-t border-surface-border pt-3 space-y-2">
+                      <p className="text-sm font-medium text-brand-700">Temporärt lösenord</p>
+                      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                        <button
+                          type="button"
+                          onClick={() => void generateTemporaryPassword(u)}
+                          disabled={savingPasswordId === u.id}
+                          className="btn-secondary disabled:opacity-50"
+                        >
+                          {savingPasswordId === u.id ? "Genererar..." : "Generera temporärt lösenord"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void sendResetLink(u)}
+                          disabled={sendingResetLinkId === u.id}
+                          className="btn-secondary disabled:opacity-50"
+                        >
+                          {sendingResetLinkId === u.id ? "Skickar..." : "Skicka återställningslänk"}
+                        </button>
+                      </div>
+                      {temporaryPasswords[u.id] && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800 break-all">
+                          Temporärt lösenord: <span className="font-semibold">{temporaryPasswords[u.id]}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
