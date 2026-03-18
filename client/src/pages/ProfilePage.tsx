@@ -6,6 +6,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<User | null>(null);
   const [form, setForm] = useState({ name: "", company: "", department: "", phone: "" });
   const [saved, setSaved] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
 
   useEffect(() => {
     api.get<User>("/auth/me").then((u) => {
@@ -25,6 +29,36 @@ export default function ProfilePage() {
     setProfile(updated);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const changePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError("Det nya lösenordet måste vara minst 8 tecken.");
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("Det nya lösenordet och bekräftelsen matchar inte.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await api.post<{ success: boolean }>("/auth/change-password", {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordSuccess("Lösenordet har uppdaterats.");
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Kunde inte byta lösenord");
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   if (!profile) {
@@ -107,6 +141,59 @@ export default function ProfilePage() {
               Sparat
             </span>
           )}
+        </div>
+      </form>
+
+      <form onSubmit={changePassword} className="card p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide">Byt lösenord</h2>
+          <p className="text-sm text-brand-400 mt-2">Uppdatera ditt lösenord direkt från din profil.</p>
+        </div>
+
+        <div>
+          <label className="label">Nuvarande lösenord</label>
+          <input
+            type="password"
+            value={passwordForm.currentPassword}
+            onChange={(e) => setPasswordForm((current) => ({ ...current, currentPassword: e.target.value }))}
+            className="input"
+            autoComplete="current-password"
+          />
+        </div>
+
+        <div>
+          <label className="label">Nytt lösenord</label>
+          <input
+            type="password"
+            value={passwordForm.newPassword}
+            onChange={(e) => setPasswordForm((current) => ({ ...current, newPassword: e.target.value }))}
+            className="input"
+            autoComplete="new-password"
+          />
+        </div>
+
+        <div>
+          <label className="label">Bekräfta nytt lösenord</label>
+          <input
+            type="password"
+            value={passwordForm.confirmPassword}
+            onChange={(e) => setPasswordForm((current) => ({ ...current, confirmPassword: e.target.value }))}
+            className="input"
+            autoComplete="new-password"
+          />
+        </div>
+
+        {passwordError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{passwordError}</div>
+        )}
+        {passwordSuccess && (
+          <div className="rounded-xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm text-accent-700">{passwordSuccess}</div>
+        )}
+
+        <div className="pt-2">
+          <button type="submit" disabled={passwordLoading} className="btn-primary w-full sm:w-auto disabled:opacity-50">
+            {passwordLoading ? "Uppdaterar..." : "Byt lösenord"}
+          </button>
         </div>
       </form>
     </div>
