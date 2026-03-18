@@ -14,6 +14,8 @@ import UsersPage from "./pages/UsersPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 
+const HIDDEN_SYSTEM_LOGIN_PATH = "/system-access-8f2c1d";
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen">Laddar...</div>;
@@ -38,7 +40,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
-      <Route path="/superadmin/login" element={user ? <Navigate to="/" /> : <SuperadminLoginPage />} />
+      <Route path="/superadmin/login" element={<Navigate to="/login" replace />} />
+      <Route path={HIDDEN_SYSTEM_LOGIN_PATH} element={user ? <Navigate to="/" /> : <SuperadminLoginPage />} />
       <Route path="/forgot-password" element={user && !user.forcePasswordChange ? <Navigate to="/" /> : <ForgotPasswordPage />} />
       <Route path="/reset-password" element={user && !user.forcePasswordChange ? <Navigate to="/" /> : <ResetPasswordPage />} />
       <Route path="/force-password-change" element={<ForcedPasswordChangeRoute />} />
