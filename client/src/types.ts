@@ -22,6 +22,7 @@ export interface Booking {
   endDate: string | null;
   city: string;
   participants: number;
+  status?: string;
   notes?: string;
   rescheduleToken: boolean;
   isPrivate?: boolean;
@@ -30,8 +31,10 @@ export interface Booking {
   customCourse: string | null;
   courseId: string;
   clientId: string;
+  createdById?: string;
   course: Course;
   client: Pick<User, "id" | "name" | "company" | "email" | "logoUrl">;
+  createdBy?: Pick<User, "id" | "name" | "company" | "email">;
   createdAt: string;
   updatedAt: string;
   hasUnread?: boolean;
@@ -72,4 +75,68 @@ export interface Invitation {
   expiresAt: string;
   createdAt: string;
   registerUrl?: string;
+}
+
+export interface StatisticsFilterOption {
+  id: string;
+  label: string;
+  email: string;
+}
+
+export interface StatisticsStatusOption {
+  value: string;
+  label: string;
+}
+
+export interface StatisticsBookingRow {
+  id: string;
+  date: string;
+  endDate: string | null;
+  createdAt: string;
+  city: string;
+  participants: number;
+  status: string;
+  statusLabel: string;
+  courseName: string;
+  dateLabel: string;
+  createdAtLabel: string;
+  timeLabel: string;
+  customer: {
+    id: string;
+    label: string;
+    email: string;
+  };
+  createdBy: {
+    id: string;
+    label: string;
+    email: string;
+  };
+}
+
+export interface StatisticsClientSummary {
+  clientId: string;
+  label: string;
+  count: number;
+  participants: number;
+}
+
+export interface StatisticsResponse {
+  filters: {
+    fromDate: string | null;
+    toDate: string | null;
+    clientIds: string[];
+    statuses: string[];
+  };
+  filterDescription: string;
+  options: {
+    clients: StatisticsFilterOption[];
+    statuses: StatisticsStatusOption[];
+  };
+  summary: {
+    totalBookings: number;
+    totalParticipants: number;
+    uniqueClients: number;
+    bookingsPerClient: StatisticsClientSummary[];
+  };
+  bookings: StatisticsBookingRow[];
 }

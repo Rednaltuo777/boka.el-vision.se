@@ -13,6 +13,7 @@ import NewBookingPage from "./pages/NewBookingPage";
 import UsersPage from "./pages/UsersPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import StatisticsPage from "./pages/StatisticsPage";
 
 const HIDDEN_SYSTEM_LOGIN_PATH = "/system-access-8f2c1d";
 
@@ -30,6 +31,14 @@ function ForcedPasswordChangeRoute() {
   if (!user) return <Navigate to="/login" />;
   if (!user.forcePasswordChange) return <Navigate to="/" />;
   return <ForcePasswordChangePage />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex items-center justify-center h-screen">Laddar...</div>;
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== "admin" && user.role !== "superadmin") return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 export default function App() {
@@ -57,8 +66,9 @@ export default function App() {
         <Route index element={<CalendarPage />} />
         <Route path="bookings/new" element={<NewBookingPage />} />
         <Route path="bookings/:id" element={<BookingPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+        <Route path="settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
+        <Route path="statistics" element={<AdminRoute><StatisticsPage /></AdminRoute>} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Routes>

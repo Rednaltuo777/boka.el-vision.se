@@ -8,6 +8,7 @@ import chatRoutes from "./routes/chat";
 import invitationRoutes from "./routes/invitations";
 import outlookRoutes from "./routes/outlook";
 import blockingPeriodRoutes from "./routes/blockingPeriods";
+import statisticsRoutes from "./routes/statistics";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/api/invitations", invitationRoutes);
 app.use("/api/outlook", outlookRoutes);
 app.use("/api/blocking-periods", blockingPeriodRoutes);
+app.use("/api/admin/statistics", statisticsRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });

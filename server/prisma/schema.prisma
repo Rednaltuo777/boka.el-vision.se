@@ -27,6 +27,7 @@ model User {
 
   invitations  Invitation[]
   bookings     Booking[]     @relation("BookingClient")
+  createdBookings Booking[]   @relation("BookingCreator")
   blockingPeriods BlockingPeriod[]
   chatMessages ChatMessage[]
   chatReads    BookingChatRead[]
@@ -58,6 +59,7 @@ model Booking {
   endDate       DateTime?
   city          String
   participants  Int      @default(1)
+  status        String   @default("active")
   rescheduleToken Boolean @default(true)
   isPrivate     Boolean  @default(false)
   sharedNotes   String   @default("")
@@ -69,6 +71,9 @@ model Booking {
   client   User   @relation("BookingClient", fields: [clientId], references: [id])
   clientId String
 
+  createdBy   User   @relation("BookingCreator", fields: [createdById], references: [id])
+  createdById String
+
   course   Course @relation(fields: [courseId], references: [id])
   courseId String
 
@@ -76,6 +81,9 @@ model Booking {
   chatReads      BookingChatRead[]
   changes        BookingChange[]
   outlookEventId String?
+
+  @@index([createdById])
+  @@index([status])
 }
 
 model BookingChange {

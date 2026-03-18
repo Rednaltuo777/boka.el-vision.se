@@ -577,6 +577,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
         date: combineDateAndTime(selectedDate, startTime),
         endDate: combineDateAndTime(selectedDate, endTime),
         city,
+        status: "active",
         isPrivate: hasAdminAccess(req.userRole) ? Boolean(isPrivate) : false,
         participants: parsedParticipants,
         rescheduleToken: true,
@@ -584,6 +585,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
         customCourse: customCourse || null,
         sharedNotes: sharedNotes || notes || "",
         clientId: req.userId!,
+        createdById: req.userId!,
       },
       include: {
         course: true,
