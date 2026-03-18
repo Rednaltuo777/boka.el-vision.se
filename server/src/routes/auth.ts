@@ -13,7 +13,7 @@ function toUserRole(role: string): UserRole {
 
 function createAuthResponse(user: { id: string; email: string; name: string | null; role: string }) {
   const role = toUserRole(user.role);
-  const token = jwt.sign({ userId: user.id, role }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ userId: user.id, role, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
 
   return {
     token,

@@ -118,6 +118,7 @@ export default function BookingPage() {
   const [warning, setWarning] = useState("");
   const isOwner = booking?.clientId === user?.id;
   const canDirectlySaveNotes = isAdmin;
+  const canViewBookingContent = booking?.canViewBookingContent !== false;
 
   useEffect(() => {
     const locationState = location.state as { distanceWarning?: string } | null;
@@ -404,6 +405,15 @@ export default function BookingPage() {
             <p className="font-medium">Geografisk varning</p>
             <p>{warning}</p>
           </div>
+        </div>
+      )}
+
+      {!canViewBookingContent && (
+        <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-700 p-3 rounded-xl text-sm">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 9h1.5m-.75 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          Innehållet i denna bokning är dolt eftersom den tillhör en annan e-postdomän.
         </div>
       )}
 
@@ -697,7 +707,7 @@ export default function BookingPage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-brand-300 mt-4">Du kan se bokningen och använda chatten, men bara bokningens ägare eller admin kan ändra anteckningar.</p>
+              <p className="text-sm text-brand-300 mt-4">Bara bokningens ägare eller admin kan ändra anteckningar. Chatt är också begränsad till ägaren och admin.</p>
             )}
           </div>
         </div>
@@ -762,7 +772,7 @@ export default function BookingPage() {
                 </button>
               </form>
             ) : (
-              <div className="p-3 border-t border-surface-border text-sm text-brand-300">Chatt är dold för privata adminhändelser.</div>
+              <div className="p-3 border-t border-surface-border text-sm text-brand-300">Chatt är bara tillgänglig för bokningens ägare och admin.</div>
             )}
           </div>
         </div>

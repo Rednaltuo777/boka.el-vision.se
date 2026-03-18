@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
+import { canViewSharedBookingContent } from "../lib/emailDomainAccess";
 import { getOpenRouteServiceDistanceKm, getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
 import { authenticate, requireAdmin, AuthRequest, hasAdminAccess } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
@@ -76,6 +77,10 @@ function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
   return hasAdminAccess(req.userRole) || booking.clientId === req.userId;
 }
 
+function canViewBookingContent(booking: { clientId: string; isPrivate?: boolean; client?: { email?: string | null } | null }, req: AuthRequest) {
+  return canViewSharedBookingContent(booking, req);
+}
+
 function isWithinEditWindow(createdAt: Date) {
   return Date.now() <= createdAt.getTime() + BOOKING_EDIT_WINDOW_MS;
 }
@@ -133,11 +138,11 @@ function toBookingTitle(booking: {
   isPrivate?: boolean;
   customCourse: string | null;
   course: { name: string };
-  client: { company: string | null; name: string | null };
+  client: { company: string | null; name: string | null; email?: string | null };
 }, req: AuthRequest) {
-  const canViewPrivate = !booking.isPrivate || canManageBooking(booking, req);
-  if (!canViewPrivate) {
-    return "Privat";
+  const canViewContent = canViewBookingContent(booking, req);
+  if (!canViewContent) {
+    return booking.isPrivate ? "Privat" : "Bokad";
   }
 
   return booking.client.company || booking.client.name
@@ -146,24 +151,27 @@ function toBookingTitle(booking: {
 }
 
 function serializeBooking(booking: any, req: AuthRequest) {
-  const isOwnerOrAdmin = canManageBooking(booking, req);
-  const isMaskedPrivate = booking.isPrivate && !isOwnerOrAdmin;
+  const canManage = canManageBooking(booking, req);
+  const canViewContent = canViewBookingContent(booking, req);
+  const isMasked = !canViewContent;
+  const maskedTitle = booking.isPrivate ? "Privat" : "Bokad";
   const editable = canEditBookingFields(booking, req);
   const movable = canMoveBooking(booking, req);
 
   return {
     ...booking,
-    notes: isMaskedPrivate ? "" : booking.sharedNotes,
-    customCourse: isMaskedPrivate ? null : booking.customCourse,
-    course: isMaskedPrivate ? { ...booking.course, name: "Privat", isCustom: false } : booking.course,
-    client: isMaskedPrivate ? { ...booking.client, name: "Privat", company: null, email: "", logoUrl: null } : booking.client,
-    city: isMaskedPrivate ? "Privat" : booking.city,
-    sharedNotes: isMaskedPrivate ? "" : booking.sharedNotes,
-    privateNotes: hasAdminAccess(req.userRole) && !isMaskedPrivate ? booking.privateNotes : undefined,
-    hasUnread: isOwnerOrAdmin ? Boolean(booking.hasUnread) : false,
-    latestChatAt: isOwnerOrAdmin ? booking.latestChatAt : null,
-    displayTitle: isMaskedPrivate ? "Privat" : toBookingTitle(booking, req),
-    canAccessChat: isOwnerOrAdmin,
+    notes: isMasked ? "" : booking.sharedNotes,
+    customCourse: isMasked ? null : booking.customCourse,
+    course: isMasked ? { ...booking.course, name: maskedTitle, isCustom: false } : booking.course,
+    client: isMasked ? { ...booking.client, name: maskedTitle, company: null, email: "", logoUrl: null } : booking.client,
+    city: isMasked ? "" : booking.city,
+    sharedNotes: isMasked ? "" : booking.sharedNotes,
+    privateNotes: hasAdminAccess(req.userRole) && canViewContent ? booking.privateNotes : undefined,
+    hasUnread: canManage ? Boolean(booking.hasUnread) : false,
+    latestChatAt: canManage ? booking.latestChatAt : null,
+    displayTitle: toBookingTitle(booking, req),
+    canAccessChat: canManage,
+    canViewBookingContent: canViewContent,
     canEditBookingFields: editable,
     canMoveBooking: movable,
     editWindowEndsAt: new Date(booking.createdAt.getTime() + BOOKING_EDIT_WINDOW_MS).toISOString(),

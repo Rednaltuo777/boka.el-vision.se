@@ -36,6 +36,7 @@ export interface Booking {
   hasUnread?: boolean;
   latestChatAt?: string | null;
   displayTitle?: string;
+  canViewBookingContent?: boolean;
   canAccessChat?: boolean;
   canEditBookingFields?: boolean;
   canMoveBooking?: boolean;
