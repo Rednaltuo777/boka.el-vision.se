@@ -3,6 +3,9 @@
   "buildCommand": "npx prisma generate --schema=server/prisma/schema.prisma && cd client && npm run build",
   "outputDirectory": "client/dist",
   "framework": null,
+  "redirects": [
+    { "source": "/superadmin/login", "destination": "/login", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" }
   ],
