@@ -119,6 +119,7 @@ export default function BookingPage() {
   const isOwner = booking?.clientId === user?.id;
   const canDirectlySaveNotes = isAdmin;
   const canViewBookingContent = booking?.canViewBookingContent !== false;
+  const moveBookingHelpText = booking?.moveBookingMessage || "Du kan omboka denna bokning en gång så länge det är mer än 14 dagar kvar till kursstart.";
 
   useEffect(() => {
     const locationState = location.state as { distanceWarning?: string } | null;
@@ -388,8 +389,9 @@ export default function BookingPage() {
                   disabled={!booking.canMoveBooking}
                   className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl border border-surface-border px-4 py-2 text-sm font-medium text-brand-600 transition-colors hover:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Move Booking
+                  Omboka datum
                 </button>
+                <p className="text-xs text-brand-400">{moveBookingHelpText}</p>
               </div>
             )}
           </div>
@@ -597,20 +599,20 @@ export default function BookingPage() {
             ) : moveMode && isOwner ? (
               <form onSubmit={submitMoveBooking} className="space-y-5">
                 <div>
-                  <label className="label">New date</label>
+                  <label className="label">Nytt datum</label>
                   <input type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} required className="input" />
                 </div>
 
                 <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 px-4 py-3 text-sm text-brand-500">
-                  This booking can only be moved one time.
+                  {moveBookingHelpText}
                 </div>
 
                 <div className="flex items-center gap-3">
                   <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
-                    {saving ? "Moving..." : "Move Booking"}
+                    {saving ? "Ombokar..." : "Spara nytt datum"}
                   </button>
                   <button type="button" onClick={cancelEditing} className="px-4 py-2 rounded-xl border border-surface-border text-brand-500 hover:text-brand-700 hover:border-brand-200 transition-colors">
-                    Cancel
+                    Avbryt
                   </button>
                 </div>
               </form>

@@ -44,6 +44,7 @@ export interface Booking {
   canAccessChat?: boolean;
   canEditBookingFields?: boolean;
   canMoveBooking?: boolean;
+  moveBookingMessage?: string | null;
   editWindowEndsAt?: string;
 }
 

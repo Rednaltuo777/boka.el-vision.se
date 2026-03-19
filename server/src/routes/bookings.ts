@@ -9,6 +9,7 @@ import * as outlook from "../lib/outlook";
 const router = Router();
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
 const BOOKING_EDIT_WINDOW_MS = 4 * 60 * 60 * 1000;
+const BOOKING_MOVE_NOTICE_MS = 14 * 24 * 60 * 60 * 1000;
 
 const stockholmOffsetFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: STOCKHOLM_TIME_ZONE,
@@ -97,16 +98,28 @@ function canEditBookingFields(booking: { clientId: string; createdAt: Date }, re
   return isWithinEditWindow(booking.createdAt);
 }
 
-function canMoveBooking(booking: { clientId: string; rescheduleToken: boolean }, req: AuthRequest) {
+function isOutsideCustomerMoveWindow(date: Date) {
+  return date.getTime() - Date.now() > BOOKING_MOVE_NOTICE_MS;
+}
+
+function getMoveBookingAccess(booking: { clientId: string; rescheduleToken: boolean; date: Date }, req: AuthRequest) {
   if (!canManageBooking(booking, req)) {
-    return false;
+    return { allowed: false, reason: "Åtkomst nekad" };
   }
 
   if (hasAdminAccess(req.userRole)) {
-    return true;
+    return { allowed: true, reason: null };
   }
 
-  return booking.rescheduleToken;
+  if (!booking.rescheduleToken) {
+    return { allowed: false, reason: "Bokningen har redan ombokats en gång och kan inte ombokas igen." };
+  }
+
+  if (!isOutsideCustomerMoveWindow(booking.date)) {
+    return { allowed: false, reason: "Bokningen kan bara ombokas om det är mer än 14 dagar kvar till kursstart." };
+  }
+
+  return { allowed: true, reason: "Du kan omboka denna bokning en gång så länge det är mer än 14 dagar kvar till kursstart." };
 }
 
 function formatStockholmDateOnly(dateValue: Date): string {
@@ -156,7 +169,8 @@ function serializeBooking(booking: any, req: AuthRequest) {
   const isMasked = !canViewContent;
   const maskedTitle = booking.isPrivate ? "Privat" : "Bokad";
   const editable = canEditBookingFields(booking, req);
-  const movable = canMoveBooking(booking, req);
+  const moveAccess = getMoveBookingAccess(booking, req);
+  const movable = moveAccess.allowed;
 
   return {
     ...booking,
@@ -174,6 +188,7 @@ function serializeBooking(booking: any, req: AuthRequest) {
     canViewBookingContent: canViewContent,
     canEditBookingFields: editable,
     canMoveBooking: movable,
+    moveBookingMessage: canManage ? moveAccess.reason : null,
     editWindowEndsAt: new Date(booking.createdAt.getTime() + BOOKING_EDIT_WINDOW_MS).toISOString(),
   };
 }
@@ -772,8 +787,9 @@ router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  if (!hasAdminAccess(req.userRole) && !booking.rescheduleToken) {
-    res.status(409).json({ error: "This booking has already been moved once and cannot be moved again." });
+  const moveAccess = getMoveBookingAccess(booking, req);
+  if (!moveAccess.allowed) {
+    res.status(409).json({ error: moveAccess.reason || "Bokningen kan inte ombokas" });
     return;
   }
 
