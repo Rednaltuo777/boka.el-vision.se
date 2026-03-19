@@ -6,8 +6,20 @@ import type { Booking, ChatMessage, Course } from "../types";
 
 const PRIVATE_OPTION = "__private__";
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
+const PRIVATE_ATTACHMENTS_MARKER = "<!--PRIVATE_ATTACHMENTS:";
+const PRIVATE_ATTACHMENTS_SUFFIX = "-->";
+const MAX_PRIVATE_ATTACHMENT_SIZE = 2 * 1024 * 1024;
+const MAX_PRIVATE_ATTACHMENTS_TOTAL_SIZE = 3 * 1024 * 1024;
 
 type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
+
+type PrivateAttachment = {
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  kind: "image" | "file";
+};
 
 type BookingFormState = {
   date: string;
@@ -67,7 +79,59 @@ function formatTimeRange(dateValue: string, endDateValue: string | null) {
   return `${start}–${end}`;
 }
 
+function parsePrivateNotes(value: string | null | undefined) {
+  const source = value || "";
+  const markerIndex = source.indexOf(PRIVATE_ATTACHMENTS_MARKER);
+  if (markerIndex === -1) {
+    return { text: source, attachments: [] as PrivateAttachment[] };
+  }
+
+  const markerEndIndex = source.indexOf(PRIVATE_ATTACHMENTS_SUFFIX, markerIndex);
+  if (markerEndIndex === -1) {
+    return { text: source, attachments: [] as PrivateAttachment[] };
+  }
+
+  const text = source.slice(0, markerIndex).trimEnd();
+  const encodedPayload = source.slice(markerIndex + PRIVATE_ATTACHMENTS_MARKER.length, markerEndIndex);
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encodedPayload));
+    if (!Array.isArray(parsed)) {
+      return { text, attachments: [] as PrivateAttachment[] };
+    }
+
+    const attachments = parsed.filter((item): item is PrivateAttachment => (
+      item
+      && typeof item.name === "string"
+      && typeof item.url === "string"
+      && typeof item.mimeType === "string"
+      && typeof item.size === "number"
+      && (item.kind === "image" || item.kind === "file")
+    ));
+
+    return { text, attachments };
+  } catch {
+    return { text: source, attachments: [] as PrivateAttachment[] };
+  }
+}
+
+function buildPrivateNotesPayload(text: string, attachments: PrivateAttachment[]) {
+  const trimmedText = text.trimEnd();
+  if (attachments.length === 0) {
+    return trimmedText;
+  }
+
+  const encodedAttachments = encodeURIComponent(JSON.stringify(attachments));
+  const separator = trimmedText ? "\n\n" : "";
+  return `${trimmedText}${separator}${PRIVATE_ATTACHMENTS_MARKER}${encodedAttachments}${PRIVATE_ATTACHMENTS_SUFFIX}`;
+}
+
+function estimateAttachmentBytes(attachments: PrivateAttachment[]) {
+  return attachments.reduce((sum, attachment) => sum + attachment.size, 0);
+}
+
 function toFormState(booking: Booking): BookingFormState {
+  const parsedPrivateNotes = parsePrivateNotes(booking.privateNotes);
   return {
     date: toDateInput(booking.date),
     startTime: toTimeInput(booking.date) || "08:00",
@@ -78,7 +142,18 @@ function toFormState(booking: Booking): BookingFormState {
     courseId: booking.courseId,
     customCourse: booking.customCourse || "",
     sharedNotes: booking.sharedNotes,
-    privateNotes: booking.privateNotes || "",
+    privateNotes: parsedPrivateNotes.text,
+  };
+}
+
+function toDisplayBooking(booking: Booking) {
+  const parsedPrivateNotes = parsePrivateNotes(booking.privateNotes);
+  return {
+    booking: {
+      ...booking,
+      privateNotes: parsedPrivateNotes.text,
+    },
+    attachments: parsedPrivateNotes.attachments,
   };
 }
 
@@ -116,6 +191,8 @@ export default function BookingPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
+  const [privateAttachments, setPrivateAttachments] = useState<PrivateAttachment[]>([]);
+  const [savedPrivateAttachments, setSavedPrivateAttachments] = useState<PrivateAttachment[]>([]);
   const isOwner = booking?.clientId === user?.id;
   const canDirectlySaveNotes = isAdmin;
   const canViewBookingContent = booking?.canViewBookingContent !== false;
@@ -131,15 +208,71 @@ export default function BookingPage() {
   useEffect(() => {
     if (!id) return;
     api.get<Booking>(`/bookings/${id}`).then((b) => {
-      setBooking(b);
-      setForm(toFormState(b));
-      setMoveDate(toDateInput(b.date));
-      setUseCustomCourse(Boolean(b.customCourse));
+      const normalized = toDisplayBooking(b);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setMoveDate(toDateInput(normalized.booking.date));
+      setUseCustomCourse(Boolean(normalized.booking.customCourse));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
     });
     if (isAdmin) {
       api.get<Course[]>("/courses").then(setCourses);
     }
   }, [id, isAdmin]);
+
+  const readFileAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Kunde inte läsa filen"));
+    reader.readAsDataURL(file);
+  });
+
+  const handlePrivateAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    setError("");
+    setSaved(false);
+
+    try {
+      let currentTotalSize = estimateAttachmentBytes(privateAttachments);
+      const nextAttachments: PrivateAttachment[] = [];
+
+      for (const file of selectedFiles) {
+        if (file.size > MAX_PRIVATE_ATTACHMENT_SIZE) {
+          throw new Error(`Filen ${file.name} är för stor. Max 2 MB per fil.`);
+        }
+
+        currentTotalSize += file.size;
+        if (currentTotalSize > MAX_PRIVATE_ATTACHMENTS_TOTAL_SIZE) {
+          throw new Error("Totalt uppladdat innehåll i privata anteckningar får vara högst 3 MB.");
+        }
+
+        const url = await readFileAsDataUrl(file);
+        nextAttachments.push({
+          name: file.name,
+          url,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          kind: file.type.startsWith("image/") ? "image" : "file",
+        });
+      }
+
+      setPrivateAttachments((current) => [...current, ...nextAttachments]);
+      event.target.value = "";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte ladda upp filen");
+      event.target.value = "";
+    }
+  };
+
+  const removePrivateAttachment = (indexToRemove: number) => {
+    setPrivateAttachments((current) => current.filter((_, index) => index !== indexToRemove));
+    setSaved(false);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -167,10 +300,13 @@ export default function BookingPage() {
     setError("");
     try {
       const data: Record<string, string> = { sharedNotes: form.sharedNotes };
-      if (isAdmin) data.privateNotes = form.privateNotes;
+      if (isAdmin) data.privateNotes = buildPrivateNotesPayload(form.privateNotes, privateAttachments);
       const updated = await api.put<Booking>(`/bookings/${id}`, data);
-      setBooking(updated);
-      setForm(toFormState(updated));
+      const normalized = toDisplayBooking(updated);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -205,12 +341,15 @@ export default function BookingPage() {
         courseId: useCustomCourse ? booking?.courseId : form.courseId,
         customCourse: useCustomCourse ? form.customCourse : "",
         sharedNotes: form.sharedNotes,
-        privateNotes: form.privateNotes,
+        privateNotes: buildPrivateNotesPayload(form.privateNotes, privateAttachments),
       });
 
-      setBooking(updated);
-      setForm(toFormState(updated));
-      setUseCustomCourse(Boolean(updated.customCourse));
+      const normalized = toDisplayBooking(updated);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setUseCustomCourse(Boolean(normalized.booking.customCourse));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
       setEditMode(false);
       setSaved(true);
       if (updated.distanceWarning) {
@@ -241,8 +380,11 @@ export default function BookingPage() {
         notes: form.sharedNotes,
       });
 
-      setBooking(updated);
-      setForm(toFormState(updated));
+      const normalized = toDisplayBooking(updated);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
       setEditMode(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -264,9 +406,12 @@ export default function BookingPage() {
 
     try {
       const updated = await api.put<Booking>(`/bookings/${id}/move`, { date: moveDate });
-      setBooking(updated);
-      setForm(toFormState(updated));
-      setMoveDate(toDateInput(updated.date));
+      const normalized = toDisplayBooking(updated);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setMoveDate(toDateInput(normalized.booking.date));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
       setMoveMode(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -282,6 +427,7 @@ export default function BookingPage() {
     setForm(toFormState(booking));
     setMoveDate(toDateInput(booking.date));
     setUseCustomCourse(Boolean(booking.customCourse));
+    setPrivateAttachments(savedPrivateAttachments);
     setEditMode(false);
     setMoveMode(false);
     setError("");
@@ -323,6 +469,48 @@ export default function BookingPage() {
       </div>
     );
   }
+
+  const renderPrivateAttachments = (editable: boolean) => (
+    <div className="mt-3 space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-brand-300">Ladda upp bilder eller filer till privata anteckningar. Max 2 MB per fil, 3 MB totalt.</p>
+        {editable && (
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-surface-border px-3 py-2 text-sm font-medium text-brand-600 transition-colors hover:bg-surface-secondary">
+            Ladda upp filer
+            <input type="file" multiple onChange={handlePrivateAttachmentUpload} className="hidden" />
+          </label>
+        )}
+      </div>
+
+      {privateAttachments.length > 0 && (
+        <div className="space-y-3">
+          {privateAttachments.map((attachment, index) => (
+            <div key={`${attachment.name}-${index}`} className="rounded-2xl border border-surface-border bg-surface-secondary/60 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-brand-700">{attachment.name}</p>
+                  <p className="text-xs text-brand-300">{Math.max(1, Math.round(attachment.size / 1024))} KB</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a href={attachment.url} download={attachment.name} target="_blank" rel="noreferrer" className="text-sm font-medium text-brand-600 hover:text-brand-800">
+                    Öppna
+                  </a>
+                  {editable && (
+                    <button type="button" onClick={() => removePrivateAttachment(index)} className="text-sm font-medium text-red-600 hover:text-red-700">
+                      Ta bort
+                    </button>
+                  )}
+                </div>
+              </div>
+              {attachment.kind === "image" && (
+                <img src={attachment.url} alt={attachment.name} className="mt-3 max-h-64 rounded-xl border border-surface-border bg-white object-contain" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -534,6 +722,7 @@ export default function BookingPage() {
                 <div>
                   <label className="label">Privata anteckningar</label>
                   <textarea value={form.privateNotes} onChange={(e) => updateForm("privateNotes", e.target.value)} rows={3} className="input resize-none" />
+                  {renderPrivateAttachments(true)}
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -691,6 +880,7 @@ export default function BookingPage() {
                   placeholder="Privata anteckningar..."
                   className="input resize-none"
                 />
+                {renderPrivateAttachments(true)}
               </div>
             )}
 
