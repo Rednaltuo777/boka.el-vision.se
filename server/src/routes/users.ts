@@ -6,6 +6,7 @@ import { authenticate, requireAdmin, requireSuperAdmin, AuthRequest, UserRole } 
 
 const router = Router();
 const USER_ROLES: UserRole[] = ["client", "admin", "superadmin"];
+const userSelect = { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true } as const;
 
 function canManageVisibleUser(requesterRole?: UserRole, targetRole?: string) {
   if (requesterRole === "superadmin") {
@@ -19,10 +20,50 @@ function canManageVisibleUser(requesterRole?: UserRole, targetRole?: string) {
 router.get("/", authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   const users = await prisma.user.findMany({
     where: req.userRole === "superadmin" ? undefined : { role: { not: "superadmin" } },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
+    select: userSelect,
     orderBy: { createdAt: "desc" },
   });
   res.json(users);
+});
+
+router.post("/", authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
+  const name = String(req.body.name || "").trim();
+  const phone = String(req.body.phone || "").trim();
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const password = String(req.body.password || "").trim();
+  const company = typeof req.body.company === "string" ? req.body.company.trim() : "";
+
+  if (!name || !phone || !email || !password) {
+    res.status(400).json({ error: "Namn, telefonnummer, e-post och lösenord krävs" });
+    return;
+  }
+
+  if (password.length < 8) {
+    res.status(400).json({ error: "Lösenordet måste vara minst 8 tecken" });
+    return;
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    res.status(400).json({ error: "Användare med denna e-post finns redan" });
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: {
+      name,
+      phone,
+      email,
+      password: hashedPassword,
+      company: company || null,
+      role: "client",
+      forcePasswordChange: true,
+    },
+    select: userSelect,
+  });
+
+  res.status(201).json(user);
 });
 
 // Update own profile
@@ -71,7 +112,7 @@ router.put("/:id/role", authenticate, requireSuperAdmin, async (req: AuthRequest
   const user = await prisma.user.update({
     where: { id },
     data: { role: nextRole },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
+    select: userSelect,
   });
 
   res.json(user);
@@ -94,7 +135,7 @@ router.put("/:id", authenticate, requireAdmin, async (req: AuthRequest, res: Res
   const user = await prisma.user.update({
     where: { id },
     data: { logoUrl: typeof logoUrl === "string" ? logoUrl.trim() || null : null },
-    select: { id: true, email: true, name: true, company: true, logoUrl: true, department: true, phone: true, role: true, forcePasswordChange: true, createdAt: true },
+    select: userSelect,
   });
 
   res.json(user);

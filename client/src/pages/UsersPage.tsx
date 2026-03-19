@@ -22,6 +22,14 @@ export default function UsersPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, User["role"]>>({});
   const [email, setEmail] = useState("");
+  const [newUserForm, setNewUserForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    password: "",
+    company: "",
+  });
+  const [creatingUser, setCreatingUser] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -44,6 +52,25 @@ export default function UsersPage() {
     });
     api.get<Invitation[]>("/invitations").then(setInvitations);
   }, [isAdminLike]);
+
+  const createUser = async (e: FormEvent) => {
+    e.preventDefault();
+    setCreatingUser(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const createdUser = await api.post<User>("/users", newUserForm);
+      setUsers((current) => [createdUser, ...current]);
+      setRoleDrafts((current) => ({ ...current, [createdUser.id]: createdUser.role }));
+      setNewUserForm({ name: "", phone: "", email: "", password: "", company: "" });
+      setMessage(`Användaren ${createdUser.email} skapades. Användaren måste byta lösenord vid första inloggningen.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte skapa användaren");
+    } finally {
+      setCreatingUser(false);
+    }
+  };
 
   const sendInvitation = async (e: FormEvent) => {
     e.preventDefault();
@@ -251,24 +278,44 @@ export default function UsersPage() {
       </div>
 
       {/* Invite Form */}
-      <div className="card p-4 sm:p-6">
-        <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Bjud in ny uppdragsgivare</h2>
-        <form onSubmit={sendInvitation} className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="E-postadress..."
-            required
-            className="input flex-1"
-          />
-          <button type="submit" className="btn-primary shrink-0">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-            </svg>
-            Skicka inbjudan
-          </button>
-        </form>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="card p-4 sm:p-6">
+          <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Skapa ny uppdragsgivare direkt</h2>
+          <form onSubmit={createUser} className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input type="text" value={newUserForm.name} onChange={(e) => setNewUserForm((current) => ({ ...current, name: e.target.value }))} placeholder="Namn" required className="input" />
+              <input type="tel" value={newUserForm.phone} onChange={(e) => setNewUserForm((current) => ({ ...current, phone: e.target.value }))} placeholder="Telefonnummer" required className="input" />
+            </div>
+            <input type="email" value={newUserForm.email} onChange={(e) => setNewUserForm((current) => ({ ...current, email: e.target.value }))} placeholder="E-postadress" required className="input" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <input type="password" value={newUserForm.password} onChange={(e) => setNewUserForm((current) => ({ ...current, password: e.target.value }))} placeholder="Skapa lösenord" required minLength={8} className="input" autoComplete="new-password" />
+              <input type="text" value={newUserForm.company} onChange={(e) => setNewUserForm((current) => ({ ...current, company: e.target.value }))} placeholder="Företag (valfritt)" className="input" />
+            </div>
+            <button type="submit" disabled={creatingUser} className="btn-primary w-full sm:w-auto disabled:opacity-50">
+              {creatingUser ? "Skapar..." : "Skapa användare"}
+            </button>
+          </form>
+        </div>
+
+        <div className="card p-4 sm:p-6">
+          <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Bjud in ny uppdragsgivare</h2>
+          <form onSubmit={sendInvitation} className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-postadress..."
+              required
+              className="input flex-1"
+            />
+            <button type="submit" className="btn-primary shrink-0">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.769 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+              </svg>
+              Skicka inbjudan
+            </button>
+          </form>
+        </div>
         {error && <p className="text-red-600 text-sm mt-3 flex items-center gap-1"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>{error}</p>}
         {message && (
           <div className="mt-3 bg-accent-50 border border-accent-200 text-accent-700 p-3 rounded-xl text-sm break-all">

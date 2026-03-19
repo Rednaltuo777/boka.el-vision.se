@@ -492,6 +492,7 @@ async function sendBookingConfirmationEmail(booking: {
 // Create a booking
 router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
   const { date, dateTo, startTime, endTime, city, courseId, customCourse, sharedNotes, notes, isPrivate, participants } = req.body;
+  const requestedClientId = typeof req.body.clientId === "string" ? req.body.clientId : "";
   if (!date || !startTime || !endTime || !city || !courseId) {
     res.status(400).json({ error: "Datum, starttid, sluttid, ort och kurs krävs" });
     return;
@@ -518,6 +519,29 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       res.status(400).json({ error: "Datum till måste vara samma dag eller senare än datum från" });
       return;
     }
+  }
+
+  let bookingClientId = req.userId!;
+  if (hasAdminAccess(req.userRole) && !Boolean(isPrivate)) {
+    if (!requestedClientId) {
+      res.status(400).json({ error: "Välj vilken uppdragsgivare bokningen ska tilldelas" });
+      return;
+    }
+
+    const targetClient = await prisma.user.findFirst({
+      where: {
+        id: requestedClientId,
+        role: "client",
+      },
+      select: { id: true },
+    });
+
+    if (!targetClient) {
+      res.status(404).json({ error: "Uppdragsgivaren hittades inte" });
+      return;
+    }
+
+    bookingClientId = targetClient.id;
   }
 
   let distanceWarning: string | null = null;
@@ -584,7 +608,7 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
         courseId,
         customCourse: customCourse || null,
         sharedNotes: sharedNotes || notes || "",
-        clientId: req.userId!,
+        clientId: bookingClientId,
         createdById: req.userId!,
       },
       include: {

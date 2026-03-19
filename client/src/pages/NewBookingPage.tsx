@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import type { Course, Booking } from "../types";
+import type { Course, Booking, User } from "../types";
 
 const PRIVATE_OPTION = "__private__";
 
@@ -12,6 +12,7 @@ export default function NewBookingPage() {
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
   const [searchParams] = useSearchParams();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [clients, setClients] = useState<User[]>([]);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState("");
   const [useCustomCourse, setUseCustomCourse] = useState(false);
@@ -32,6 +33,7 @@ export default function NewBookingPage() {
     city: "",
     participants: "1",
     isPrivate: false,
+    clientId: "",
     courseId: "",
     customCourse: "",
     sharedNotes: "",
@@ -39,7 +41,12 @@ export default function NewBookingPage() {
 
   useEffect(() => {
     api.get<Course[]>("/courses").then(setCourses);
-  }, []);
+    if (isAdmin) {
+      api.get<User[]>("/users").then((loadedUsers) => {
+        setClients(loadedUsers.filter((loadedUser) => loadedUser.role === "client"));
+      });
+    }
+  }, [isAdmin]);
 
   const loadCourses = async () => {
     const nextCourses = await api.get<Course[]>("/courses");
@@ -132,11 +139,18 @@ export default function NewBookingPage() {
     e.preventDefault();
     setError("");
     setWarning("");
+
+    if (isAdmin && !form.isPrivate && !form.clientId) {
+      setError("Välj vilken uppdragsgivare bokningen ska tilldelas.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.post<{ booking: Booking; bookings?: Booking[]; createdCount?: number; distanceWarning: string | null }>("/bookings", {
         ...form,
         dateTo: isAdmin ? form.dateTo : form.date,
+        clientId: isAdmin && !form.isPrivate ? form.clientId : undefined,
         courseId: form.courseId || courses[0]?.id,
       });
 
@@ -213,6 +227,18 @@ export default function NewBookingPage() {
         {isAdmin && (
           <div className="rounded-2xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm text-brand-600">
             Samma händelse skapas för varje dag i det valda datumintervallet.
+          </div>
+        )}
+
+        {isAdmin && !form.isPrivate && (
+          <div>
+            <label className="label">Tilldela uppdragsgivare</label>
+            <select value={form.clientId} onChange={(e) => update("clientId", e.target.value)} required className="input">
+              <option value="">Välj uppdragsgivare...</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>{client.company || client.name || client.email}</option>
+              ))}
+            </select>
           </div>
         )}
 
