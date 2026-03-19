@@ -67,6 +67,11 @@ export default function NewBookingPage() {
     return { ...current, [field]: value };
   });
 
+  const getClientOptionLabel = (client: User) => {
+    const primaryLabel = client.company || client.name || "Uppdragsgivare";
+    return `${primaryLabel} (${client.email})`;
+  };
+
   const addCourse = async () => {
     resetCourseManagerMessages();
     setCourseManagerLoading(true);
@@ -236,7 +241,7 @@ export default function NewBookingPage() {
             <select value={form.clientId} onChange={(e) => update("clientId", e.target.value)} required className="input">
               <option value="">Välj uppdragsgivare...</option>
               {clients.map((client) => (
-                <option key={client.id} value={client.id}>{client.company || client.name || client.email}</option>
+                <option key={client.id} value={client.id}>{getClientOptionLabel(client)}</option>
               ))}
             </select>
           </div>
