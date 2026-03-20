@@ -29,6 +29,7 @@ export interface Booking {
   sharedNotes: string;
   privateNotes?: string;
   customCourse: string | null;
+  calendarCity?: string;
   courseId: string;
   clientId: string;
   createdById?: string;

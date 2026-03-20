@@ -179,6 +179,7 @@ function serializeBooking(booking: any, req: AuthRequest) {
     course: isMasked ? { ...booking.course, name: maskedTitle, isCustom: false } : booking.course,
     client: isMasked ? { ...booking.client, name: maskedTitle, company: null, email: "", logoUrl: null } : booking.client,
     city: isMasked ? "" : booking.city,
+    calendarCity: booking.city,
     sharedNotes: isMasked ? "" : booking.sharedNotes,
     privateNotes: hasAdminAccess(req.userRole) && canViewContent ? booking.privateNotes : undefined,
     hasUnread: canManage ? Boolean(booking.hasUnread) : false,

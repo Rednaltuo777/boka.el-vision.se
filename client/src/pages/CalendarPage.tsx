@@ -140,7 +140,7 @@ export default function CalendarPage() {
         eventType: "booking",
         hasUnread: Boolean(b.hasUnread),
         logoUrl: b.client.logoUrl || null,
-        city: b.city,
+        city: b.calendarCity || b.city,
       },
     })),
     ...blockingPeriods.flatMap((period) => {
