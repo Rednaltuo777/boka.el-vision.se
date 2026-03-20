@@ -4,6 +4,10 @@ function normalizeEmail(value?: string | null) {
   return value?.trim().toLowerCase() || null;
 }
 
+function normalizeCompany(value?: string | null) {
+  return value?.trim().toLowerCase() || null;
+}
+
 export function getEmailDomain(email?: string | null) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
@@ -25,8 +29,22 @@ export function sharesEmailDomain(leftEmail?: string | null, rightEmail?: string
   return Boolean(leftDomain && rightDomain && leftDomain === rightDomain);
 }
 
+export function sharesOrganization(
+  left?: { company?: string | null; email?: string | null } | null,
+  right?: { company?: string | null; email?: string | null } | null,
+) {
+  const leftCompany = normalizeCompany(left?.company);
+  const rightCompany = normalizeCompany(right?.company);
+
+  if (leftCompany && rightCompany) {
+    return leftCompany === rightCompany;
+  }
+
+  return sharesEmailDomain(left?.email, right?.email);
+}
+
 export function canViewSharedBookingContent(
-  booking: { clientId: string; isPrivate?: boolean; client?: { email?: string | null } | null },
+  booking: { clientId: string; isPrivate?: boolean; client?: { company?: string | null; email?: string | null } | null },
   req: AuthRequest,
 ) {
   if (req.userRole === "admin" || req.userRole === "superadmin") {
@@ -41,5 +59,5 @@ export function canViewSharedBookingContent(
     return false;
   }
 
-  return sharesEmailDomain(booking.client?.email, req.userEmail);
+  return sharesOrganization(booking.client, { company: req.userCompany, email: req.userEmail });
 }

@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
   userId?: string;
   userRole?: UserRole;
   userEmail?: string;
+  userCompany?: string | null;
 }
 
 export function hasAdminAccess(role?: string): role is "superadmin" | "admin" {
@@ -30,12 +31,13 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     req.userRole = payload.role;
     req.userEmail = payload.email;
 
-    if (!req.userEmail && req.userId) {
+    if (req.userId) {
       const user = await prisma.user.findUnique({
         where: { id: req.userId },
-        select: { email: true },
+        select: { email: true, company: true },
       });
-      req.userEmail = user?.email;
+      req.userEmail = req.userEmail || user?.email;
+      req.userCompany = user?.company || null;
     }
 
     next();
