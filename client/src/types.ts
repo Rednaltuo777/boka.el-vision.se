@@ -18,6 +18,7 @@ export interface Course {
 
 export interface Booking {
   id: string;
+  bookingNumber?: string;
   date: string;
   endDate: string | null;
   city: string;
@@ -44,6 +45,7 @@ export interface Booking {
   canViewBookingContent?: boolean;
   canAccessChat?: boolean;
   canEditBookingFields?: boolean;
+  canReassignClient?: boolean;
   canMoveBooking?: boolean;
   moveBookingMessage?: string | null;
   editWindowEndsAt?: string;

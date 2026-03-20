@@ -2,7 +2,7 @@ import { useState, useEffect, FormEvent, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import type { Booking, ChatMessage, Course } from "../types";
+import type { Booking, ChatMessage, Course, User } from "../types";
 
 const PRIVATE_OPTION = "__private__";
 const STOCKHOLM_TIME_ZONE = "Europe/Stockholm";
@@ -10,8 +10,6 @@ const PRIVATE_ATTACHMENTS_MARKER = "<!--PRIVATE_ATTACHMENTS:";
 const PRIVATE_ATTACHMENTS_SUFFIX = "-->";
 const MAX_PRIVATE_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 const MAX_PRIVATE_ATTACHMENTS_TOTAL_SIZE = 3 * 1024 * 1024;
-
-type BookingUpdateResponse = Booking & { distanceWarning?: string | null };
 
 type PrivateAttachment = {
   name: string;
@@ -157,6 +155,10 @@ function toDisplayBooking(booking: Booking) {
   };
 }
 
+function getBookingReference(booking: Booking) {
+  return booking.bookingNumber || booking.id;
+}
+
 export default function BookingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -168,6 +170,7 @@ export default function BookingPage() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [form, setForm] = useState<BookingFormState>({
@@ -190,20 +193,14 @@ export default function BookingPage() {
   const [deleting, setDeleting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
-  const [warning, setWarning] = useState("");
   const [privateAttachments, setPrivateAttachments] = useState<PrivateAttachment[]>([]);
   const [savedPrivateAttachments, setSavedPrivateAttachments] = useState<PrivateAttachment[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [savingClientAssignment, setSavingClientAssignment] = useState(false);
   const isOwner = booking?.clientId === user?.id;
   const canDirectlySaveNotes = isAdmin;
   const canViewBookingContent = booking?.canViewBookingContent !== false;
   const moveBookingHelpText = booking?.moveBookingMessage || "Du kan omboka denna bokning en gång så länge det är mer än 14 dagar kvar till kursstart.";
-
-  useEffect(() => {
-    const locationState = location.state as { distanceWarning?: string } | null;
-    if (locationState?.distanceWarning) {
-      setWarning(locationState.distanceWarning);
-    }
-  }, [location.state]);
 
   useEffect(() => {
     if (!id) return;
@@ -215,11 +212,21 @@ export default function BookingPage() {
       setUseCustomCourse(Boolean(normalized.booking.customCourse));
       setPrivateAttachments(normalized.attachments);
       setSavedPrivateAttachments(normalized.attachments);
+      setSelectedClientId(normalized.booking.clientId);
     });
     if (isAdmin) {
       api.get<Course[]>("/courses").then(setCourses);
     }
   }, [id, isAdmin]);
+
+  useEffect(() => {
+    if (!booking?.canReassignClient) {
+      setAssignableUsers([]);
+      return;
+    }
+
+    api.get<User[]>("/users/assignable").then(setAssignableUsers).catch(() => setAssignableUsers([]));
+  }, [booking?.canReassignClient]);
 
   const readFileAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -320,7 +327,6 @@ export default function BookingPage() {
     setForm((current) => ({ ...current, [field]: value }));
     setSaved(false);
     setError("");
-    setWarning("");
   };
 
   const saveBooking = async (e: FormEvent) => {
@@ -329,10 +335,9 @@ export default function BookingPage() {
     setSaving(true);
     setSaved(false);
     setError("");
-    setWarning("");
 
     try {
-      const updated = await api.put<BookingUpdateResponse>(`/bookings/${id}`, {
+      const updated = await api.put<Booking>(`/bookings/${id}`, {
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
@@ -350,11 +355,9 @@ export default function BookingPage() {
       setUseCustomCourse(Boolean(normalized.booking.customCourse));
       setPrivateAttachments(normalized.attachments);
       setSavedPrivateAttachments(normalized.attachments);
+      setSelectedClientId(normalized.booking.clientId);
       setEditMode(false);
       setSaved(true);
-      if (updated.distanceWarning) {
-        setWarning(updated.distanceWarning);
-      }
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kunde inte uppdatera bokningen");
@@ -370,7 +373,6 @@ export default function BookingPage() {
     setSaving(true);
     setSaved(false);
     setError("");
-    setWarning("");
 
     try {
       const updated = await api.put<Booking>(`/bookings/${id}/edit`, {
@@ -385,6 +387,7 @@ export default function BookingPage() {
       setForm(toFormState(normalized.booking));
       setPrivateAttachments(normalized.attachments);
       setSavedPrivateAttachments(normalized.attachments);
+      setSelectedClientId(normalized.booking.clientId);
       setEditMode(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -402,7 +405,6 @@ export default function BookingPage() {
     setSaving(true);
     setSaved(false);
     setError("");
-    setWarning("");
 
     try {
       const updated = await api.put<Booking>(`/bookings/${id}/move`, { date: moveDate });
@@ -412,6 +414,7 @@ export default function BookingPage() {
       setMoveDate(toDateInput(normalized.booking.date));
       setPrivateAttachments(normalized.attachments);
       setSavedPrivateAttachments(normalized.attachments);
+      setSelectedClientId(normalized.booking.clientId);
       setMoveMode(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -428,10 +431,36 @@ export default function BookingPage() {
     setMoveDate(toDateInput(booking.date));
     setUseCustomCourse(Boolean(booking.customCourse));
     setPrivateAttachments(savedPrivateAttachments);
+    setSelectedClientId(booking.clientId);
     setEditMode(false);
     setMoveMode(false);
     setError("");
-    setWarning("");
+  };
+
+  const saveClientAssignment = async () => {
+    if (!id || !booking || !selectedClientId || selectedClientId === booking.clientId) {
+      return;
+    }
+
+    setSavingClientAssignment(true);
+    setSaved(false);
+    setError("");
+
+    try {
+      const updated = await api.put<Booking>(`/bookings/${id}/client`, { clientId: selectedClientId });
+      const normalized = toDisplayBooking(updated);
+      setBooking(normalized.booking);
+      setForm(toFormState(normalized.booking));
+      setPrivateAttachments(normalized.attachments);
+      setSavedPrivateAttachments(normalized.attachments);
+      setSelectedClientId(normalized.booking.clientId);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kunde inte byta användare på bokningen");
+    } finally {
+      setSavingClientAssignment(false);
+    }
   };
 
   const deleteBooking = async () => {
@@ -586,24 +615,12 @@ export default function BookingPage() {
         </div>
       </div>
 
-      {warning && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-sm">
-          <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
-          </svg>
-          <div>
-            <p className="font-medium">Geografisk varning</p>
-            <p>{warning}</p>
-          </div>
-        </div>
-      )}
-
       {!canViewBookingContent && (
         <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 text-slate-700 p-3 rounded-xl text-sm">
           <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 9h1.5m-.75 3.75h.008v.008H12v-.008ZM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
-          Innehållet i denna bokning är dolt eftersom den tillhör en annan e-postdomän.
+          Innehållet i denna bokning är dolt eftersom den tillhör en annan organisation.
         </div>
       )}
 
@@ -673,7 +690,6 @@ export default function BookingPage() {
                         setForm((current) => ({ ...current, isPrivate: false, courseId: e.target.value }));
                         setSaved(false);
                         setError("");
-                        setWarning("");
                       }}
                       required
                       className="input"
@@ -695,7 +711,6 @@ export default function BookingPage() {
                         setUseCustomCourse(e.target.checked);
                         setSaved(false);
                         setError("");
-                        setWarning("");
                       }}
                       className="rounded border-brand-300 text-brand-700 focus:ring-brand-400"
                     />
@@ -746,17 +761,17 @@ export default function BookingPage() {
               <form onSubmit={saveClientEdit} className="space-y-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="label">Start time</label>
+                    <label className="label">Starttid</label>
                     <input type="time" value={form.startTime} onChange={(e) => updateForm("startTime", e.target.value)} required className="input" />
                   </div>
                   <div>
-                    <label className="label">End time</label>
+                    <label className="label">Sluttid</label>
                     <input type="time" value={form.endTime} onChange={(e) => updateForm("endTime", e.target.value)} required className="input" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="label">Participants</label>
+                  <label className="label">Deltagare</label>
                   <input
                     type="number"
                     min="1"
@@ -768,20 +783,20 @@ export default function BookingPage() {
                 </div>
 
                 <div>
-                  <label className="label">Notes</label>
+                  <label className="label">Anteckningar</label>
                   <textarea value={form.sharedNotes} onChange={(e) => updateForm("sharedNotes", e.target.value)} rows={3} className="input resize-none" />
                 </div>
 
                 <div className="rounded-2xl border border-surface-border bg-surface-secondary/60 px-4 py-3 text-sm text-brand-500">
-                  Bookings can only be edited within 4 hours after creation.
+                  Bokningar kan bara redigeras inom 4 timmar efter att de skapades.
                 </div>
 
                 <div className="flex items-center gap-3">
                   <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
-                    {saving ? "Saving..." : "Save Booking"}
+                    {saving ? "Sparar..." : "Spara bokning"}
                   </button>
                   <button type="button" onClick={cancelEditing} className="px-4 py-2 rounded-xl border border-surface-border text-brand-500 hover:text-brand-700 hover:border-brand-200 transition-colors">
-                    Cancel
+                    Avbryt
                   </button>
                 </div>
               </form>
@@ -808,8 +823,8 @@ export default function BookingPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6 text-sm">
                 <div>
-                  <p className="text-brand-400 text-xs mb-0.5">Booking ID</p>
-                  <p className="font-medium text-brand-700 break-all">{booking.id}</p>
+                  <p className="text-brand-400 text-xs mb-0.5">Bokningsnummer</p>
+                  <p className="font-medium text-brand-700">{getBookingReference(booking)}</p>
                 </div>
                 <div>
                   <p className="text-brand-400 text-xs mb-0.5">Datum</p>
@@ -824,7 +839,7 @@ export default function BookingPage() {
                   <p className="font-medium text-brand-700">{booking.city}</p>
                 </div>
                 <div>
-                  <p className="text-brand-400 text-xs mb-0.5">Participants</p>
+                  <p className="text-brand-400 text-xs mb-0.5">Deltagare</p>
                   <p className="font-medium text-brand-700">{booking.participants}</p>
                 </div>
                 {booking.isPrivate && isAdmin && (
@@ -848,6 +863,51 @@ export default function BookingPage() {
               </div>
             )}
           </div>
+
+          {booking.canReassignClient && (
+            <div className="card p-6">
+              <h2 className="text-sm font-semibold text-brand-400 uppercase tracking-wide mb-4">Byt användare på bokningen</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Tilldela användare</label>
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    className="input"
+                  >
+                    {assignableUsers.map((assignableUser) => (
+                      <option key={assignableUser.id} value={assignableUser.id}>
+                        {assignableUser.company || assignableUser.name || "Uppdragsgivare"} ({assignableUser.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-sm text-brand-400">
+                  {isAdmin
+                    ? "Administratörer kan flytta bokningen till valfri uppdragsgivare."
+                    : "Du kan bara flytta bokningen till en användare i samma organisation."}
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void saveClientAssignment()}
+                    disabled={savingClientAssignment || !selectedClientId || selectedClientId === booking.clientId}
+                    className="btn-primary disabled:opacity-50"
+                  >
+                    {savingClientAssignment ? "Sparar..." : "Spara användare"}
+                  </button>
+                  {saved && (
+                    <span className="text-sm text-accent-600 flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Sparat
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Shared Notes */}
           <div className={`card p-6 ${((editMode && isAdmin) || moveMode) ? "hidden" : ""}`}>

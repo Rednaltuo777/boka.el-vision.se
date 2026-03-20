@@ -55,6 +55,7 @@ model Course {
 
 model Booking {
   id            String   @id @default(uuid())
+  bookingNumber String   @unique
   date          DateTime
   endDate       DateTime?
   city          String
@@ -84,6 +85,14 @@ model Booking {
 
   @@index([createdById])
   @@index([status])
+}
+
+model BookingSequenceCounter {
+  id        String   @id @default(uuid())
+  year      Int      @unique
+  lastValue Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model BookingChange {

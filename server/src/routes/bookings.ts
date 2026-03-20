@@ -1,8 +1,8 @@
+import { Prisma } from "@prisma/client";
 import { Router, Response } from "express";
 import prisma from "../lib/prisma";
 import { sendEmail } from "../lib/email";
-import { canViewSharedBookingContent } from "../lib/emailDomainAccess";
-import { getOpenRouteServiceDistanceKm, getOpenRouteServiceTravelMinutes } from "../lib/openRouteService";
+import { canViewSharedBookingContent, sharesOrganization } from "../lib/emailDomainAccess";
 import { authenticate, requireAdmin, AuthRequest, hasAdminAccess } from "../middleware/auth";
 import * as outlook from "../lib/outlook";
 
@@ -36,6 +36,21 @@ const stockholmLongDateFormatter = new Intl.DateTimeFormat("sv-SE", {
   day: "numeric",
 });
 
+const stockholmYearFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: STOCKHOLM_TIME_ZONE,
+  year: "numeric",
+});
+
+function partsToLookup(parts: Intl.DateTimeFormatPart[]) {
+  return parts.reduce<Record<string, string>>((result, part) => {
+    if (part.type !== "literal") {
+      result[part.type] = part.value;
+    }
+
+    return result;
+  }, {});
+}
+
 function getTimeZoneOffsetMinutes(dateValue: Date, timeZone: string): number {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -49,7 +64,7 @@ function getTimeZoneOffsetMinutes(dateValue: Date, timeZone: string): number {
   });
 
   const parts = formatter.formatToParts(dateValue);
-  const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const lookup = partsToLookup(parts);
   const asUtc = Date.UTC(
     Number(lookup.year),
     Number(lookup.month) - 1,
@@ -78,7 +93,25 @@ function canManageBooking(booking: { clientId: string }, req: AuthRequest) {
   return hasAdminAccess(req.userRole) || booking.clientId === req.userId;
 }
 
-function canViewBookingContent(booking: { clientId: string; isPrivate?: boolean; client?: { email?: string | null } | null }, req: AuthRequest) {
+function canReassignBookingClient(
+  booking: { isPrivate?: boolean; client?: { company?: string | null; email?: string | null } | null },
+  req: AuthRequest,
+) {
+  if (hasAdminAccess(req.userRole)) {
+    return true;
+  }
+
+  if (booking.isPrivate) {
+    return false;
+  }
+
+  return sharesOrganization(booking.client, { company: req.userCompany, email: req.userEmail });
+}
+
+function canViewBookingContent(
+  booking: { clientId: string; isPrivate?: boolean; client?: { company?: string | null; email?: string | null } | null },
+  req: AuthRequest,
+) {
   return canViewSharedBookingContent(booking, req);
 }
 
@@ -124,8 +157,33 @@ function getMoveBookingAccess(booking: { clientId: string; rescheduleToken: bool
 
 function formatStockholmDateOnly(dateValue: Date): string {
   const parts = stockholmOffsetFormatter.formatToParts(dateValue);
-  const lookup = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const lookup = partsToLookup(parts);
   return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+function getBookingNumberYear(dateValue: Date): number {
+  return Number(stockholmYearFormatter.format(dateValue));
+}
+
+function formatBookingNumber(year: number, sequenceValue: number): string {
+  return `${year}${String(sequenceValue).padStart(4, "0")}`;
+}
+
+async function allocateBookingNumbers(tx: Prisma.TransactionClient, count: number, dateValue: Date) {
+  const year = getBookingNumberYear(dateValue);
+  const counter = await tx.bookingSequenceCounter.upsert({
+    where: { year },
+    create: { year, lastValue: count },
+    update: {
+      lastValue: {
+        increment: count,
+      },
+    },
+    select: { lastValue: true },
+  });
+  const firstSequenceValue = counter.lastValue - count + 1;
+
+  return Array.from({ length: count }, (_, index) => formatBookingNumber(year, firstSequenceValue + index));
 }
 
 async function logBookingChange(input: {
@@ -177,8 +235,8 @@ function serializeBooking(booking: any, req: AuthRequest) {
     notes: isMasked ? "" : booking.sharedNotes,
     customCourse: isMasked ? null : booking.customCourse,
     course: isMasked ? { ...booking.course, name: maskedTitle, isCustom: false } : booking.course,
-    client: isMasked ? { ...booking.client, name: maskedTitle, company: null, email: "", logoUrl: null } : booking.client,
-    city: isMasked ? "" : booking.city,
+    client: isMasked ? { ...booking.client, name: maskedTitle, company: null, email: "", logoUrl: booking.client.logoUrl } : booking.client,
+    city: booking.city,
     calendarCity: booking.city,
     sharedNotes: isMasked ? "" : booking.sharedNotes,
     privateNotes: hasAdminAccess(req.userRole) && canViewContent ? booking.privateNotes : undefined,
@@ -190,6 +248,7 @@ function serializeBooking(booking: any, req: AuthRequest) {
     canEditBookingFields: editable,
     canMoveBooking: movable,
     moveBookingMessage: canManage ? moveAccess.reason : null,
+    canReassignClient: canReassignBookingClient(booking, req),
     editWindowEndsAt: new Date(booking.createdAt.getTime() + BOOKING_EDIT_WINDOW_MS).toISOString(),
   };
 }
@@ -197,7 +256,6 @@ function serializeBooking(booking: any, req: AuthRequest) {
 function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; authorId: string }>; chatReads: Array<{ lastReadAt: Date }>; privateNotes?: string | null }>(
   booking: T,
   userId: string,
-  isAdmin: boolean,
 ) {
   const latestMessage = booking.chatMessages[0];
   const latestRead = booking.chatReads[0];
@@ -214,107 +272,8 @@ function withUnreadStatus<T extends { chatMessages: Array<{ createdAt: Date; aut
   };
 }
 
-/**
- * Calculate approximate distance in km between two Swedish cities
- * using a simple lookup + Haversine formula.
- * In production, replace with a geocoding API.
- */
-const CITY_COORDS: Record<string, [number, number]> = {
-  stockholm: [59.3293, 18.0686],
-  göteborg: [57.7089, 11.9746],
-  malmö: [55.605, 13.0038],
-  uppsala: [59.8586, 17.6389],
-  linköping: [58.4108, 15.6214],
-  örebro: [59.2753, 15.2134],
-  västerås: [59.6099, 16.5448],
-  norrköping: [58.5942, 16.1826],
-  jönköping: [57.7826, 14.1618],
-  umeå: [63.8258, 20.2630],
-  lund: [55.7047, 13.1910],
-  borås: [57.7210, 12.9401],
-  sundsvall: [62.3908, 17.3069],
-  gävle: [60.6749, 17.1413],
-  karlstad: [59.3793, 13.5036],
-  luleå: [65.5848, 22.1547],
-  växjö: [56.8777, 14.8091],
-  halmstad: [56.6745, 12.8578],
-  kalmar: [56.6634, 16.3566],
-  kristianstad: [56.0294, 14.1567],
-};
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function normalizeCity(city: string): string {
-  return city.trim().toLowerCase();
-}
-
-function getCityDistanceKm(city1: string, city2: string): number | null {
-  const c1 = CITY_COORDS[normalizeCity(city1)];
-  const c2 = CITY_COORDS[normalizeCity(city2)];
-  if (!c1 || !c2) return null;
-  return haversineKm(c1[0], c1[1], c2[0], c2[1]);
-}
-
-function getEstimatedTravelMinutes(city1: string, city2: string): number {
-  if (normalizeCity(city1) === normalizeCity(city2)) {
-    return 0;
-  }
-
-  const km = getCityDistanceKm(city1, city2);
-  if (km === null) {
-    // Unknown cities should not silently bypass same-day travel validation.
-    return 31;
-  }
-
-  return Math.ceil((km / 80) * 60) + 30;
-}
-
 function rangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
   return startA < endB && startB < endA;
-}
-
-async function getRequiredTravelMinutes(city1: string, city2: string): Promise<number> {
-  if (normalizeCity(city1) === normalizeCity(city2)) {
-    return 0;
-  }
-
-  try {
-    const openRouteServiceTravelMinutes = await getOpenRouteServiceTravelMinutes(city1, city2);
-    if (openRouteServiceTravelMinutes !== null) {
-      return openRouteServiceTravelMinutes;
-    }
-  } catch (error) {
-    console.error("OpenRouteService travel time lookup failed:", error);
-  }
-
-  return getEstimatedTravelMinutes(city1, city2);
-}
-
-async function getDistanceWarning(city1: string, city2: string): Promise<string | null> {
-  let km = getCityDistanceKm(city1, city2);
-
-  if (km === null) {
-    try {
-      km = await getOpenRouteServiceDistanceKm(city1, city2);
-    } catch (error) {
-      console.error("OpenRouteService distance lookup failed:", error);
-    }
-  }
-
-  if (km === null) return null;
-  // 30 Swedish miles = 300 km
-  if (km > 300) {
-    return `Varning: Avståndet mellan ${city1} och ${city2} är ca ${Math.round(km)} km (${Math.round(km / 10)} mil). Det överstiger 30 mil.`;
-  }
-  return null;
 }
 
 function combineDateAndTime(dateValue: string, timeValue: string): Date {
@@ -395,7 +354,6 @@ async function findBookingsOnDate(dateValue: Date, excludeBookingId?: string) {
 async function findSameDaySchedulingConflict(
   bookingDate: Date,
   bookingEndDate: Date,
-  city: string,
   excludeBookingId?: string,
 ) {
   const bookingsOnDate = await findBookingsOnDate(bookingDate, excludeBookingId);
@@ -405,26 +363,6 @@ async function findSameDaySchedulingConflict(
 
     if (rangesOverlap(bookingDate, bookingEndDate, existingBooking.date, existingEndDate)) {
       return `Tiden krockar med en annan bokning samma dag (${toTimeLabel(existingBooking.date) || "okänd tid"}-${toTimeLabel(existingEndDate) || "okänd tid"}).`;
-    }
-
-    const requiredTravelMinutes = await getRequiredTravelMinutes(city, existingBooking.city);
-    if (requiredTravelMinutes === 0) {
-      continue;
-    }
-
-    const newBookingStartsAfterExisting = bookingDate >= existingEndDate;
-    const travelGapMs = newBookingStartsAfterExisting
-      ? bookingDate.getTime() - existingEndDate.getTime()
-      : existingBooking.date.getTime() - bookingEndDate.getTime();
-
-    const requiredTravelMs = requiredTravelMinutes * 60 * 1000;
-
-    if (travelGapMs >= 0 && travelGapMs < requiredTravelMs) {
-      return `Det finns inte tillrackligt med restid mellan ${existingBooking.city} och ${city} samma dag.`;
-    }
-
-    if (requiredTravelMinutes > 30) {
-      return `Restiden mellan ${existingBooking.city} och ${city} ar mer an 30 minuter, sa dessa bokningar kan inte ligga samma dag.`;
     }
   }
 
@@ -441,7 +379,8 @@ async function sendBookingConfirmationEmail(booking: {
   course: { name: string };
   client: { name: string | null; company: string | null; email: string };
 }) {
-  const clientUrl = (process.env.CLIENT_URL || "http://localhost:5173").trim();
+  const env = process.env as Record<string, string | undefined>;
+  const clientUrl = (env.CLIENT_URL || "http://localhost:5173").trim();
   const bookingUrl = `${clientUrl}/bookings/${booking.id}`;
   const courseName = booking.customCourse || booking.course.name;
   const formattedDate = stockholmLongDateFormatter.format(booking.date);
@@ -560,8 +499,6 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     bookingClientId = targetClient.id;
   }
 
-  let distanceWarning: string | null = null;
-
   for (const selectedDate of selectedDates) {
     const bookingDate = combineDateAndTime(selectedDate, startTime);
     const bookingEndDate = combineDateAndTime(selectedDate, endTime);
@@ -582,57 +519,46 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const schedulingConflict = await findSameDaySchedulingConflict(bookingDate, bookingEndDate, city);
+    const schedulingConflict = await findSameDaySchedulingConflict(bookingDate, bookingEndDate);
     if (schedulingConflict) {
       res.status(409).json({ error: schedulingConflict });
       return;
     }
+  }
 
-    if (!distanceWarning) {
-      const dayBefore = new Date(bookingDate.getTime() - 86400000);
-      const dayAfter = new Date(bookingDate.getTime() + 86400000);
+  const createdBookings = await prisma.$transaction(async (tx) => {
+    const now = new Date();
+    const bookingNumbers = await allocateBookingNumbers(tx, selectedDates.length, now);
+    const results = [];
 
-      const adjacentBookings = await prisma.booking.findMany({
-        where: {
-          OR: [
-            { date: { gte: dayBefore, lt: bookingDate } },
-            { date: { gte: bookingDate, lt: dayAfter } },
-          ],
+    for (const [index, selectedDate] of selectedDates.entries()) {
+      const createdBooking = await tx.booking.create({
+        data: {
+          bookingNumber: bookingNumbers[index],
+          date: combineDateAndTime(selectedDate, startTime),
+          endDate: combineDateAndTime(selectedDate, endTime),
+          city,
+          status: "active",
+          isPrivate: hasAdminAccess(req.userRole) ? Boolean(isPrivate) : false,
+          participants: parsedParticipants,
+          rescheduleToken: true,
+          courseId,
+          customCourse: customCourse || null,
+          sharedNotes: sharedNotes || notes || "",
+          clientId: bookingClientId,
+          createdById: req.userId!,
+        },
+        include: {
+          course: true,
+          client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
         },
       });
 
-      for (const adjacentBooking of adjacentBookings) {
-        const warning = await getDistanceWarning(city, adjacentBooking.city);
-        if (warning) {
-          distanceWarning = warning;
-          break;
-        }
-      }
+      results.push(createdBooking);
     }
-  }
 
-  const createdBookings = await prisma.$transaction(
-    selectedDates.map((selectedDate) => prisma.booking.create({
-      data: {
-        date: combineDateAndTime(selectedDate, startTime),
-        endDate: combineDateAndTime(selectedDate, endTime),
-        city,
-        status: "active",
-        isPrivate: hasAdminAccess(req.userRole) ? Boolean(isPrivate) : false,
-        participants: parsedParticipants,
-        rescheduleToken: true,
-        courseId,
-        customCourse: customCourse || null,
-        sharedNotes: sharedNotes || notes || "",
-        clientId: bookingClientId,
-        createdById: req.userId!,
-      },
-      include: {
-        course: true,
-        client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
-      },
-    })),
-  );
+    return results;
+  });
 
   await Promise.all(createdBookings.map((booking) => logBookingChange({
     bookingId: booking.id,
@@ -674,7 +600,6 @@ router.post("/", authenticate, async (req: AuthRequest, res: Response) => {
     booking: serializeBooking(createdBookings[0], req),
     bookings: createdBookings.map((booking) => serializeBooking(booking, req)),
     createdCount: createdBookings.length,
-    distanceWarning,
   });
 });
 
@@ -721,7 +646,7 @@ router.put("/:id/edit", authenticate, async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, booking.city, id);
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, id);
   if (schedulingConflict) {
     res.status(409).json({ error: schedulingConflict });
     return;
@@ -811,7 +736,7 @@ router.put("/:id/move", authenticate, async (req: AuthRequest, res: Response) =>
     return;
   }
 
-  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, booking.city, id);
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate, id);
   if (schedulingConflict) {
     res.status(409).json({ error: schedulingConflict });
     return;
@@ -869,7 +794,7 @@ router.get("/", authenticate, async (req: AuthRequest, res: Response) => {
     orderBy: { date: "asc" },
   });
 
-  const result = bookings.map((booking) => serializeBooking(withUnreadStatus(booking, req.userId!, hasAdminAccess(req.userRole)), req));
+  const result = bookings.map((booking) => serializeBooking(withUnreadStatus(booking, req.userId!), req));
 
   res.json(result);
 });
@@ -900,7 +825,95 @@ router.get("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  res.json(serializeBooking(withUnreadStatus(booking, req.userId!, hasAdminAccess(req.userRole)), req));
+  res.json(serializeBooking(withUnreadStatus(booking, req.userId!), req));
+});
+
+router.put("/:id/client", authenticate, async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const requestedClientId = String(req.body.clientId || "").trim();
+
+  if (!requestedClientId) {
+    res.status(400).json({ error: "Välj vilken användare bokningen ska tilldelas" });
+    return;
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  if (!booking) {
+    res.status(404).json({ error: "Bokning ej hittad" });
+    return;
+  }
+
+  if (!canReassignBookingClient(booking, req)) {
+    res.status(403).json({ error: "Åtkomst nekad" });
+    return;
+  }
+
+  const targetClient = await prisma.user.findFirst({
+    where: {
+      id: requestedClientId,
+      role: "client",
+    },
+    select: { id: true, name: true, company: true, email: true, logoUrl: true },
+  });
+
+  if (!targetClient) {
+    res.status(404).json({ error: "Användaren hittades inte" });
+    return;
+  }
+
+  if (!hasAdminAccess(req.userRole) && !sharesOrganization(booking.client, targetClient)) {
+    res.status(403).json({ error: "Du kan bara byta användare inom samma organisation" });
+    return;
+  }
+
+  const updated = await prisma.booking.update({
+    where: { id },
+    data: { clientId: targetClient.id },
+    include: {
+      course: true,
+      client: { select: { id: true, name: true, company: true, email: true, logoUrl: true } },
+    },
+  });
+
+  await logBookingChange({
+    bookingId: updated.id,
+    changedById: req.userId!,
+    changeType: "BOOKING_CLIENT_CHANGED",
+    oldValue: {
+      clientId: booking.client.id,
+      clientName: booking.client.name,
+      clientCompany: booking.client.company,
+      clientEmail: booking.client.email,
+    },
+    newValue: {
+      clientId: targetClient.id,
+      clientName: targetClient.name,
+      clientCompany: targetClient.company,
+      clientEmail: targetClient.email,
+    },
+  });
+
+  if (updated.outlookEventId) {
+    outlook.updateEvent(updated.outlookEventId, {
+      id: updated.id,
+      date: updated.date,
+      endDate: updated.endDate,
+      city: updated.city,
+      courseName: updated.customCourse || updated.course.name,
+      clientName: updated.client.name || "",
+      clientCompany: updated.client.company || undefined,
+      sharedNotes: updated.sharedNotes,
+    }).catch(() => {});
+  }
+
+  res.json(serializeBooking(updated, req));
 });
 
 // Update booking
@@ -954,35 +967,10 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const startOfBookingDay = startOfDay(nextDate);
-  const endOfBookingDay = endOfDay(nextDate);
-
-  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate || nextDate, nextCity, id);
+  const schedulingConflict = await findSameDaySchedulingConflict(nextDate, nextEndDate || nextDate, id);
   if (schedulingConflict) {
     res.status(409).json({ error: schedulingConflict });
     return;
-  }
-
-  const dayBefore = new Date(startOfBookingDay.getTime() - 86400000);
-  const dayAfter = new Date(startOfBookingDay.getTime() + 86400000);
-
-  const adjacentBookings = await prisma.booking.findMany({
-    where: {
-      id: { not: id },
-      OR: [
-        { date: { gte: dayBefore, lt: startOfBookingDay } },
-        { date: { gte: startOfBookingDay, lt: dayAfter } },
-      ],
-    },
-  });
-
-  let distanceWarning: string | null = null;
-  for (const adjacentBooking of adjacentBookings) {
-    const warning = await getDistanceWarning(nextCity, adjacentBooking.city);
-    if (warning) {
-      distanceWarning = warning;
-      break;
-    }
   }
 
   const data: Record<string, unknown> = {};
@@ -1018,10 +1006,7 @@ router.put("/:id", authenticate, async (req: AuthRequest, res: Response) => {
     }).catch(() => {});
   }
 
-  res.json({
-    ...serializeBooking(updated, req),
-    distanceWarning,
-  });
+  res.json(serializeBooking(updated, req));
 });
 
 // Delete booking (admin only)
